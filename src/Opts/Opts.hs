@@ -8,41 +8,45 @@ import GHC.Generics (Generic)
 
 
 parseOptions :: IO Options
-parseOptions = execParser (info (Options <$> parseCommand <*> verbosity) idm)
+parseOptions = execParser (info (Options <$> parseCommand <*> verbosity <*> (fixPath)) idm)
 
 parseCommand :: Parser Command
 parseCommand = subparser
-  (  command "add" (info (Command Add <$> subjects)
+  (  command "add" (info (Command Add <$> subjects <*> sm "TEXT")
       ( progDesc "add" ))
-  <> command "switch" (info (Command Switch <$> subjects)
+  <> command "switch" (info (Command Switch <$> subjects <*> sm "TEXT")
       ( progDesc "switch" ))
-  <> command "delete" (info (Command Delete <$> subjects)
+  <> command "delete" (info (Command Delete <$> subjects <*> sm "TEXT")
       ( progDesc "delete" ))
-  <> command "view" (info (Command Delete <$> subjects)
+  <> command "view" (info (Command Delete <$> subjects <*> sm "TEXT")
       ( progDesc "view" ))
-  )
-
-subjects :: Parser Subject
-subjects = subparser
-  (  command "host"    (info (Host <$> sm "HOSTNAME")
-      ( progDesc "host"))
-  <> command "layer"    (info (Layer <$> sm "LAYER")
-      ( progDesc "layer"))
-  <> command "user"    (info (User <$> sm "USER NAME")
-      ( progDesc "user"))
-  <> command "service" (info (Service <$> sm "SERVICE")
-      ( progDesc "service"))
-  <> command "check"   (info (Check <$> sm "PATH")
-      ( progDesc "check"))
-  <> command "template" (info (Template <$> sm "TEMPLATE")
-      ( progDesc "template"))
   )
   where
     sm = strArgument . metavar
 
+subjects :: Parser Subject
+subjects = subparser
+  (  command "host"    (info (pure Host)
+      ( progDesc "host"))
+  <> command "layer"    (info (pure Layer)
+      ( progDesc "layer"))
+  <> command "user"    (info (pure User)
+      ( progDesc "user"))
+  <> command "service" (info (pure Service)
+      ( progDesc "service"))
+  <> command "check"   (info (pure Check)
+      ( progDesc "check"))
+  <> command "template" (info (pure Template)
+      ( progDesc "template"))
+  )
+
 data Verbosity = Normal | Verbose deriving (Show, Eq, Generic)
 
 instance Binary Verbosity
+
+fixPath :: Parser String
+fixPath = strOption
+  ( long "fix-path" <> short 'f' <> metavar "PATH" ) <|> pure "."
 
 verbosity :: Parser Verbosity
 verbosity = flag Normal Verbose
@@ -53,11 +57,12 @@ verbosity = flag Normal Verbose
 data Options = Options
   { optCommand :: Command
   , optVerbosity :: Verbosity
+  , optFixPath :: Path
   } deriving (Show, Eq, Generic)
 
 instance Binary Options
 
-data Command = Command Action Subject
+data Command = Command Action Subject String
   deriving (Show, Eq, Generic)
 
 instance Binary Command
@@ -67,12 +72,12 @@ data Action = Add | Switch | Delete | View deriving (Show, Eq, Generic)
 instance Binary Action 
 
 data Subject
-  = Host Hostname
-  | Layer Layername 
-  | User String
-  | Service String
-  | Check Path
-  | Template Path
+  = Host
+  | Layer
+  | User
+  | Service
+  | Check
+  | Template
   deriving (Show, Eq, Generic)
 
 instance Binary Subject

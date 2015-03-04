@@ -16,35 +16,68 @@ import Opts.Opts
 path :: FilePath
 path = "/Users/chemist/Develop/fix/tmp/"
 
-realp :: FilePath
-realp = path </> ".fix"
+fixDirectoryName :: Path
+fixDirectoryName = ".fix"
 
-statePath :: FilePath
-statePath = realp </> "®««««««"
+fixFile :: Path
+fixFile = "®««««««"
 
-readState :: IO Fix
-readState = do
-    stateAvailable <- doesFileExist statePath
+layerPrefix :: Path
+layerPrefix = "®"
+
+readState :: Path -> IO Fix
+readState fixDirectory = do
+    let fixState = fixDirectory </> fixFile
+    stateAvailable <- doesFileExist fixState
     if stateAvailable
-       then decodeFile statePath
-       else return $ Fix Nothing Nothing [] Normal
+       then decodeFile fixState
+       else return $ Fix fixDirectory Nothing Nothing [] Normal
 
-writeState :: Fix -> IO ()
-writeState = encodeFile statePath
+writeState :: Path -> Fix -> IO ()
+writeState fixDirectory = encodeFile $ fixDirectory </> fixFile
 
 main :: IO ()
 main = do
     command <-  parseOptions 
-    fixDirectoryAvailable <-  doesDirectoryExist realp
-    unless fixDirectoryAvailable $ error "Cant found fix directory, try fix init, or go to right directory"
-    writeState =<< execStateT (execute command) =<< readState
+    let fixDirectory = optFixPath command </> fixDirectoryName
+    fixDirectoryAvailable <-  doesDirectoryExist $ fixDirectory
+    unless fixDirectoryAvailable $ error "Cant found fix directory, try fix init, or fix -f path to fix directory"
+    writeState fixDirectory =<< execStateT (execute command) =<< readState fixDirectory
 --     createDirectoryIfMissing True realp
 
 execute :: Options -> ST ()
 execute opts = do
     updateState opts
+    run (optCommand opts)
     logState (optVerbosity opts)
     
+run :: Command -> ST ()
+run (Command Add Layer layerName) = do
+    createIfMissing Layer layerName
+    run (Command Switch Layer layerName)
+run (Command Switch Layer layerName) = do
+    isLayer <- doesExists Layer layerName
+    if isLayer
+       then do
+           -- switch to layer code
+           liftIO $ printf "end"
+       else liftIO $ printf "layer does not exist, try create new layer"
+    
+
+run _ = liftIO $ printf "command not realizaded"
+
+doesExists :: Subject -> Layername -> ST Bool
+doesExists Layer layerName = liftIO . doesDirectoryExist =<< prefix Layer layerName
+doesExists _ _ = error $ "doesExists: not implemented"
+
+createIfMissing :: Subject -> Layername -> ST ()
+createIfMissing Layer layerName = do
+    fixDirectory <- getFixDirectory
+    liftIO $ createDirectoryIfMissing True $ fixDirectory </> layerPrefix <> layerName
+createIfMissing _ _ = liftIO . printf $ "createIfMissing: not implemented"
+
+getFixDirectory :: ST Path
+getFixDirectory = stFixDirectory <$> get
 
 updateState :: Options -> ST ()
 updateState opts = modify $ 
@@ -58,11 +91,17 @@ logState Normal = return ()
 logState Verbose = liftIO . printf =<< show <$> get
 
 
+prefix :: Subject -> Name -> ST Path
+prefix Layer layerName = (</> layerPrefix <> layerName) <$> getFixDirectory 
+prefix _ _ = error "prefix"
+
+type Name = String
 
 type ST = StateT Fix IO
 
 data Fix = 
-  Fix { stCurrentLayer :: Maybe Path
+  Fix { stFixDirectory :: Path
+      , stCurrentLayer :: Maybe Path
       , stLastCommand  :: Maybe Command
       , stHistory      :: [Command]
       , stVerbosity   :: Verbosity

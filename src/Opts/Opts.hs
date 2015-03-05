@@ -12,24 +12,30 @@ parseOptions = execParser (info (Options <$> parseCommand <*> verbosity <*> (fix
 
 parseCommand :: Parser Command
 parseCommand = subparser
-  (  command "add" (info (Command Add <$> subjects <*> sm "TEXT")
+  (  command "add" (info (Command Add <$> subjects <*> sm "NAME")
       ( progDesc "add" ))
-  <> command "switch" (info (Command Switch <$> subjects <*> sm "TEXT")
+  <> command "switch" (info (Command Switch <$> subjects <*> sm "NAME")
       ( progDesc "switch" ))
-  <> command "delete" (info (Command Delete <$> subjects <*> sm "TEXT")
+  <> command "delete" (info (Command Delete <$> subjects <*> sm "NAME")
       ( progDesc "delete" ))
-  <> command "view" (info (Command Delete <$> subjects <*> sm "TEXT")
+  <> command "view" (info ((Command View <$> subjects  <*> sm "NAME") <|> (Command View <$> pure Work <*> pure ""))
       ( progDesc "view" ))
+  <> command "pwd" (info (Command Pwd <$> pure Work <*> pure "")
+      ( progDesc "pwd" ))
+  <> command "init" (info (Command Init <$> pure Work <*> pure "")
+      ( progDesc "init" ))
+  <> command "save" (info (Command Save <$> pure Work <*> pure "")
+      ( progDesc "save" ))
   )
   where
     sm = strArgument . metavar
 
-subjects :: Parser Subject
+subjects :: Parser Context
 subjects = subparser
-  (  command "host"    (info (pure Host)
-      ( progDesc "host"))
-  <> command "layer"    (info (pure Layer)
-      ( progDesc "layer"))
+  (  command "host"    (info (pure Host) 
+      ( progDesc "host")) <> metavar "CONTEXT: host | layer | user | service | check | template"
+  <> command "layer"    (info (pure Layer) 
+      ( progDesc "layer")) 
   <> command "user"    (info (pure User)
       ( progDesc "user"))
   <> command "service" (info (pure Service)
@@ -46,7 +52,7 @@ instance Binary Verbosity
 
 fixPath :: Parser String
 fixPath = strOption
-  ( long "fix-path" <> short 'f' <> metavar "PATH" ) <|> pure "."
+  ( long "fix-path" <> short 'f' <> metavar "PATH" ) <|> pure ""
 
 verbosity :: Parser Verbosity
 verbosity = flag Normal Verbose
@@ -62,25 +68,33 @@ data Options = Options
 
 instance Binary Options
 
-data Command = Command Action Subject String
+data Command = Command Action Context String
   deriving (Show, Eq, Generic)
 
 instance Binary Command
 
-data Action = Add | Switch | Delete | View deriving (Show, Eq, Generic)
+data Action = Add 
+            | Switch 
+            | Delete 
+            | View 
+            | Pwd 
+            | Init 
+            | Save 
+            deriving (Show, Eq, Generic)
 
 instance Binary Action 
 
-data Subject
+data Context
   = Host
   | Layer
   | User
   | Service
   | Check
   | Template
+  | Work
   deriving (Show, Eq, Generic)
 
-instance Binary Subject
+instance Binary Context
 
 type Path = String
 type Hostname = String

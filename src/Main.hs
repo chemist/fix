@@ -13,6 +13,7 @@ import Control.Applicative
 import Control.Exception.Base (try, throw, SomeException)
 
 import Prelude hiding (log)
+import Layer 
 
 import Opts.Opts
 
@@ -200,7 +201,6 @@ data Fix =
       , stContext      :: Context
       , stVerbosity    :: Verbosity
       } deriving (Eq, Generic)
-
 instance Binary Fix
 
 instance Show Fix where

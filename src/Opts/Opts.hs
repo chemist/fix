@@ -6,6 +6,40 @@ import Data.Map
 import Data.Binary
 import GHC.Generics (Generic)
 
+{--
+fix
+  показать рабочий стэк слоев с файлами
+fix show
+  показать все слои с файлами
+fix describe $name
+  показать слой $name с файлами
+fix add $name
+  fix save
+  добавить слой поверх текущего
+  переключиться на него
+fix remove $name
+  удалить слой
+fix remove
+  fix remove верхний слой
+  убрать файлы верхнего слоя из рабочей директории
+fix up
+  переключиться на слой выше если есть
+fix down 
+  переключиться на слой ниже если есть
+fix swap
+  переключиться между текущим и предыдущим слоем
+fix swap $name
+fix save
+  сохранить текущий слой
+fix clean
+  очистить рабочую директорию без сохранения
+  очистить стэк слоев
+fix destroy $name
+  физически удалить слой
+fix save and clean
+  fix save
+  fix clean
+--}
 
 parseOptions :: IO Options
 parseOptions = execParser (info (Options <$> parseCommand <*> verbosity <*> (fixPath)) idm)

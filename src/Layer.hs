@@ -174,30 +174,21 @@ instance Binary a => Binary (Diff a)
 instance Binary a => Binary (Changes a)
 instance Binary a => Binary (Layer a)
 
-patch :: (Show a, Eq a) => Layer a -> Layer a -> Changes a
-patch (Layer (_, old)) (Layer (_, new)) = Changes (onlyChanges $ getDiff old new)
+getPatch :: (Show a, Eq a) => Layer a -> Layer a -> Changes a
+getPatch (Layer (_, old)) (Layer (_, new)) = Changes (filter isDifference $ getDiff old new)
   where
-    onlyChanges :: [Diff a] -> [Diff a]
-    onlyChanges = filter fun 
-      where
-      fun Both{} = False
-      fun _ = True
+    isDifference Both{} = False
+    isDifference _ = False
 
-apply :: (Show a, Eq a) => Layer a -> Changes a -> Layer a
-apply (Layer (anc, xs)) (Changes cs) = Layer (anc, patched)
+data PatchType = Apply | Undo deriving (Eq, Show)
+
+patch :: (Show a, Eq a) => PatchType -> Layer a -> Changes a -> Layer a
+patch pt (Layer (anc, xs)) (Changes cs) = Layer (anc, patched)
   where
     patched = foldl change xs cs
-    change ls (First x) = delete x ls
-    change ls (Second x) = x : ls
-    change _ _ = error "Both can't be in Changes"
-
-undo :: (Show a, Eq a) => Layer a -> Changes a -> Layer a
-undo (Layer (anc, xs)) (Changes cs) = Layer (anc, patched)
-  where
-    patched = foldl change xs cs
-    change ls (First x) = x : ls
-    change ls (Second x) = delete x ls
+    change ls (First x)  = if pt == Apply then delete x ls else x : ls
+    change ls (Second x) = if pt == Undo  then delete x ls else x : ls
     change _ _ = error "Both can't be in Changes"
 
 testPatch :: (Show a, Eq a) => Layer a -> Changes a -> Bool
-testPatch l p = l == undo (apply l p) p
+testPatch l p = l == patch Undo (patch Apply l p) p

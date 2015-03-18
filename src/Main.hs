@@ -69,22 +69,22 @@ runInit _ _ = error "Cant found fix directory, try fix init, or fix -f path to f
 
     
 run :: Command -> ST ()
-run (Command Add Layer layerName) = do
-    createIfMissing Layer layerName
-    run (Command Switch Layer layerName)
-run (Command Switch Layer layerName) = do
-    isLayer <- doesExists Layer layerName
+run (Command Add OLayer layerName) = do
+    createIfMissing OLayer layerName
+    run (Command Switch OLayer layerName)
+run (Command Switch OLayer layerName) = do
+    isLayer <- doesExists OLayer layerName
     if isLayer
        then do
            -- switch to layer code
            modify $ \s -> s { stCurrentLayer = Just layerName }
            clean Work ""
-           clone Layer Work layerName ""
+           clone OLayer Work layerName ""
        else liftIO $ printf "layer does not exist, try create new layer"
 run (Command Save _ _) = do
     Just layerName <- stCurrentLayer <$> get
-    clean Layer layerName
-    clone Work Layer "" layerName 
+    clean OLayer layerName
+    clone Work OLayer "" layerName 
 run (Command Pwd _ _) = do
     currentLayer <- stCurrentLayer <$> get
     liftIO . printf $ maybe "\n" (<> "\n") currentLayer
@@ -105,11 +105,11 @@ log :: String -> StateT Fix IO ()
 log x = liftIO . printf $ x <> "\n"
 
 doesExists :: Context -> Layername -> ST Bool
-doesExists Layer layerName = liftIO . doesDirectoryExist =<< prefix Layer layerName
+doesExists OLayer layerName = liftIO . doesDirectoryExist =<< prefix OLayer layerName
 doesExists _ _ = error $ "doesExists: not implemented"
 
 createIfMissing :: Context -> Layername -> ST ()
-createIfMissing Layer layerName = do
+createIfMissing OLayer layerName = do
     fixDirectory <- getFixDirectory
     liftIO $ createDirectoryIfMissing True $ fixDirectory </> layerPrefix <> layerName
 createIfMissing _ _ = liftIO . printf $ "createIfMissing: not implemented"
@@ -133,7 +133,7 @@ logState Verbose = liftIO . printf =<< show <$> get
 
 
 prefix :: Context -> Name -> ST Path
-prefix Layer layerName = (</> layerPrefix <> layerName) <$> getFixDirectory 
+prefix OLayer layerName = (</> layerPrefix <> layerName) <$> getFixDirectory 
 prefix Work _ = getWorkDirectory
 prefix _ _ = error "prefix"
 
@@ -177,19 +177,17 @@ copyDirectory fromDir toDir = do
 
     
 clone :: Context -> Context -> String -> String -> ST ()
-clone Layer Work layerName _ = do
-    fromContext <- prefix Layer layerName
+clone OLayer Work layerName _ = do
+    fromContext <- prefix OLayer layerName
     toContext <- prefix Work ""
     liftIO $ copyDirectory fromContext toContext
-clone Work Layer _ layerName = do
+clone Work OLayer _ layerName = do
     fromContext <- prefix Work ""
-    toContext <- prefix Layer layerName
+    toContext <- prefix OLayer layerName
     liftIO $ copyDirectory fromContext toContext
 
 
 clone _ _ _ _ = undefined
-
-type Name = String
 
 type ST = StateT Fix IO
 

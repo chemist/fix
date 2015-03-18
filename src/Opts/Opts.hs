@@ -68,7 +68,7 @@ subjects :: Parser Context
 subjects = subparser
   (  command "host"    (info (pure Host) 
       ( progDesc "host")) <> metavar "CONTEXT: host | layer | user | service | check | template"
-  <> command "layer"    (info (pure Layer) 
+  <> command "layer"    (info (pure OLayer) 
       ( progDesc "layer")) 
   <> command "user"    (info (pure User)
       ( progDesc "user"))
@@ -120,7 +120,7 @@ instance Binary Action
 
 data Context
   = Host
-  | Layer
+  | OLayer
   | User
   | Service
   | Check

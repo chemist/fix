@@ -1,5 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Layer where
 
@@ -7,6 +9,7 @@ import Data.Binary
 import System.Directory.Tree
 import GHC.Generics (Generic)
 import Data.ByteString (ByteString, readFile, writeFile)
+import Data.ByteString.Lazy (toStrict, fromStrict)
 import System.Posix.Types (FileMode, UserID, GroupID)
 import System.FilePath
 import Control.Applicative
@@ -14,15 +17,18 @@ import System.Posix.Files
 import Crypto.Hash.MD5
 import Data.Monoid ((<>))
 import Control.Monad
-import Data.Algorithm.Diff
+import Data.Algorithm.Diff 
+import Data.List (delete)
+import GHC.IO.Exception
 import Prelude hiding (readFile, writeFile)
 
-import Opts.Opts
+-- import Opts.Opts
 
 data FixLayer = FixLayer
   { lName :: String
-  , lPath :: Path
-  , lTree :: DirTree Body
+  , lComment :: String
+  , lPath :: FilePath
+  , lBase :: Layer Body
   } deriving (Eq, Show, Generic)
 
 data Body = Body
@@ -49,49 +55,11 @@ instance Binary FileMode where
     get = toEnum <$> get
 
 instance Binary Body
-instance Binary a => Binary (DirTree a) where
-    put (File n a) = putWord8 0 >> put n >> put a
-    put (Dir n t) = putWord8 1 >> put n >> put t
-    put (Failed n e) = error $ "cant put file: " ++ show n ++ " error: " ++ show e
-    get = unpackTree =<< getWord8
-      where
-      unpackTree 0 = File <$> get <*> get
-      unpackTree 1 = Dir <$> get <*> get
-      unpackTree _ = error "bad tag"
 
-instance Binary a => Binary (DTree a) where
-    put (DTree (f :/ t)) = put f >> put t
-    get = DTree <$> ((:/) <$> get <*> get)
-
-readBody :: FilePath -> IO Body
-readBody f = do
-    bs <- readFile f
-    fs <- getFileStatus f
-    return $ Body (hash bs) bs (fileMode fs) (fileOwner fs) (fileGroup fs)
-
-writeBody :: FilePath -> Body -> IO ()
-writeBody f (Body _ bs _ _ _) = do
-    writeFile f bs
-
-writeDTree :: FilePath -> DTree Body -> IO ()
-writeDTree fp (DTree adt) = do
-    r <- writeDirectoryWith writeBody (fp :/ dirTree adt)
-    when (anyFailed $ dirTree r) $ print $ "Error: " <> show (failures $ dirTree r)
-
-
-
-readDTree :: FilePath -> IO (DTree Body)
-readDTree fp = do
-    p :/ t <- readDirectoryWith readBody (addTrailingPathSeparator (normalise fp) <> ".")
-    return $ DTree $ p :/ filterDir fun t
-  where
-  fun (Dir ".fix" _) = False
-  fun _ = True
-
-newtype DTree a = DTree (AnchoredDirTree a) deriving (Eq)
+newtype DTree a = DTree (AnchoredDirTree a) deriving (Eq, Generic, Binary)
 
 instance Show a => Show (DTree a) where
-    show (DTree (path :/ f)) = path ++ tail (unlines $ draw f)
+    show (DTree (anc :/ f)) = anc ++ tail (unlines $ draw f)
       where
         draw (Dir n xs) = n : drawSubtree xs
         draw (File n x) = [n <> " " <> show x]
@@ -103,19 +71,75 @@ instance Show a => Show (DTree a) where
 
         shift first other = zipWith (++) (first : repeat other)
 
-data DF a = D | F a deriving (Show, Eq)
+data DF a = D | F a deriving (Show, Eq, Generic)
 
-toList :: (Show a, Eq a) => DTree a -> (FilePath, [(FilePath, DF a)])
-toList (DTree (a :/ dt)) = (a, map (\(p, f) -> (joinPath $ reverse p, f)) $ toList' ([], dt))
+instance Binary a => Binary (DF a)
+
+deriving instance Generic (DirTree a)
+deriving instance Generic (AnchoredDirTree a)
+
+instance Binary IOException where
+    put = error "BUG: can't put IOException"
+    get = error "BUG: can't get IOException"
+
+instance Binary a => Binary (DirTree a)
+instance Binary a => Binary (AnchoredDirTree a)
+
+type Name = String 
+
+class Loadable a where
+    load :: Name -> FilePath -> IO a
+    dump    :: FilePath -> a -> IO ()
+
+instance Saveable a => Loadable (DTree a) where
+    dump fp (DTree adt) = do
+        r <- writeDirectoryWith save (fp :/ dirTree adt)
+        when (anyFailed $ dirTree r) $ print $ "Error: " <> show (failures $ dirTree r)
+    load n fp = do
+        _ :/ t <- readDirectoryWith restore (addTrailingPathSeparator (normalise fp) <> ".")
+        return $ DTree $ n :/ filterDir fun t
+      where
+      fun (Dir ".fix" _) = False
+      fun Failed{} = False
+      fun _ = True
+
+instance (Saveable a, Show a, Eq a) => Loadable (Layer a) where
+    dump fp l = dump fp (fromLayer l)
+    load n fp = toLayer <$> load n fp
+
+
+class Saveable a where
+    restore :: FilePath -> IO a
+    save :: FilePath -> a -> IO ()
+
+instance Saveable Body where
+    restore f = do
+        bs <- readFile f
+        fs <- getFileStatus f
+        return $ Body (hash bs) bs (fileMode fs) (fileOwner fs) (fileGroup fs)
+    save f (Body _ bs _ _ _) = do
+        writeFile f bs
+
+instance (Binary a, Saveable a) => Saveable (Layer a) where
+    restore fp = decode . fromStrict <$> readFile fp
+    save fp l = writeFile fp (toStrict . encode $ l)
+
+instance (Binary a, Saveable a) => Saveable (Changes a) where
+    save fp c = writeFile fp (toStrict . encode $ c)
+    restore fp = decode . fromStrict <$> readFile fp
+
+toLayer :: (Show a, Eq a) => DTree a -> Layer a
+toLayer (DTree (a :/ dt)) = Layer (a, map (\(p, f) -> (joinPath $ reverse p, f)) $ toList' ([], dt))
   where
-    toList' :: (Show a, Eq a) => ([FilePath], DirTree a) -> [([Path],DF a)]
+    toList' :: (Show a, Eq a) => ([FilePath], DirTree a) -> [([FilePath],DF a)]
     toList' (p, Dir n []) = [(n:p, D)]
     toList' (p, Dir n xs) = (n:p, D) : concatMap (\x -> toList' (n:p, x)) xs 
     toList' (p, File n f) = [(n:p, F f)]
     toList' e = error (show e)
 
-fromList :: (Show a, Eq a) => (FilePath, [(FilePath, DF a)]) -> DTree a
-fromList (a, sx) = DTree $ a :/ (foldl1 insert . map singleton $ sx)
+fromLayer :: (Show a, Eq a) => Layer a -> DTree a
+fromLayer (Layer (a, [])) = DTree $ a :/ Dir "." []
+fromLayer (Layer (a, sx)) = DTree $ a :/ (foldl1 insert . map singleton $ sx)
   where
     singleton :: (Show a, Eq a) => (FilePath, DF a) -> DirTree a
     singleton (fp, df) = singleton' (splitPath fp, df)
@@ -139,11 +163,41 @@ fromList (a, sx) = DTree $ a :/ (foldl1 insert . map singleton $ sx)
       | otherwise = l : insert' ls n
 
 test :: (Show a, Eq a) => DTree a -> Bool
-test x = x == (fromList . toList $ x)
+test x = x == (fromLayer . toLayer $ x)
 
+newtype Changes a = Changes [Diff (FilePath, DF a)] deriving (Show, Generic, Eq)
 
-onlySecond :: [Diff a] -> [a]
-onlySecond [] = []
-onlySecond (Second x : xs) = x : onlySecond xs
-onlySecond (_: xs) = onlySecond xs
+newtype Layer a = Layer (FilePath, [(FilePath, DF a)]) deriving (Show, Generic, Eq)
 
+deriving instance Generic (Diff a)
+instance Binary a => Binary (Diff a)
+instance Binary a => Binary (Changes a)
+instance Binary a => Binary (Layer a)
+
+patch :: (Show a, Eq a) => Layer a -> Layer a -> Changes a
+patch (Layer (_, old)) (Layer (_, new)) = Changes (onlyChanges $ getDiff old new)
+  where
+    onlyChanges :: [Diff a] -> [Diff a]
+    onlyChanges = filter fun 
+      where
+      fun Both{} = False
+      fun _ = True
+
+apply :: (Show a, Eq a) => Layer a -> Changes a -> Layer a
+apply (Layer (anc, xs)) (Changes cs) = Layer (anc, patched)
+  where
+    patched = foldl change xs cs
+    change ls (First x) = delete x ls
+    change ls (Second x) = x : ls
+    change _ _ = error "Both can't be in Changes"
+
+undo :: (Show a, Eq a) => Layer a -> Changes a -> Layer a
+undo (Layer (anc, xs)) (Changes cs) = Layer (anc, patched)
+  where
+    patched = foldl change xs cs
+    change ls (First x) = x : ls
+    change ls (Second x) = delete x ls
+    change _ _ = error "Both can't be in Changes"
+
+testPatch :: (Show a, Eq a) => Layer a -> Changes a -> Bool
+testPatch l p = l == undo (apply l p) p

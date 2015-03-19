@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Layer where
 
@@ -23,13 +24,26 @@ import GHC.IO.Exception
 import Prelude hiding (readFile, writeFile)
 
 -- import Opts.Opts
+import Tree
 
-data FixLayer = FixLayer
-  { lName :: String
-  , lComment :: String
-  , lPath :: FilePath
-  , lBase :: Layer Body
+instance Contexted CLayer where
+    index (CLayer _ n) = n
+
+type Comment = String
+
+data CLayer = CLayer Comment Name deriving (Show, Eq, Generic)
+
+instance Binary CLayer
+
+data Layers = Layers
+  { rName    :: Name
+  , rComment :: String
+  , rBase    :: Layer Body
+  , rTree    :: Zipper Tree CLayer
   } deriving (Eq, Show, Generic)
+
+
+instance Binary Layers
 
 data Body = Body
   { bMD5   :: ByteString
@@ -84,8 +98,6 @@ instance Binary IOException where
 
 instance Binary a => Binary (DirTree a)
 instance Binary a => Binary (AnchoredDirTree a)
-
-type Name = String 
 
 class Loadable a where
     load :: Name -> FilePath -> IO a
@@ -178,7 +190,7 @@ getPatch :: (Show a, Eq a) => Layer a -> Layer a -> Changes a
 getPatch (Layer (_, old)) (Layer (_, new)) = Changes (filter isDifference $ getDiff old new)
   where
     isDifference Both{} = False
-    isDifference _ = False
+    isDifference _ = True
 
 data PatchType = Apply | Undo deriving (Eq, Show)
 
@@ -192,3 +204,6 @@ patch pt (Layer (anc, xs)) (Changes cs) = Layer (anc, patched)
 
 testPatch :: (Show a, Eq a) => Layer a -> Changes a -> Bool
 testPatch l p = l == patch Undo (patch Apply l p) p
+
+
+

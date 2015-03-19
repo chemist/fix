@@ -5,15 +5,19 @@ import System.Directory
 import System.FilePath
 -- import System.Posix.Files
 import Control.Monad.State
+import Control.Monad.Writer
 import Data.Binary (decodeFile, encodeFile, Binary)
 import GHC.Generics (Generic)
 import Text.Printf
-import Data.Monoid ((<>))
 import Control.Applicative
 import Control.Exception.Base (try, throw, SomeException)
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 import Prelude hiding (log)
 import Layer 
+import Tree (Route, Name)
+import qualified Tree
 
 import Opts.Opts
 
@@ -28,10 +32,13 @@ fixFile :: Path
 fixFile = "®««««««"
 
 layerPrefix :: Path
-layerPrefix = "®®"
+layerPrefix = ""
+
+setPrefix :: Path
+setPrefix = ""
 
 emptyFix :: Fix
-emptyFix = Fix "." Nothing Nothing [] Work Normal
+emptyFix = Fix "." emptyLayers Map.empty [] Normal
 
 readState :: Path -> IO Fix
 readState fixDirectory = do
@@ -44,8 +51,13 @@ readState fixDirectory = do
 setFixDirectory :: Path -> Fix -> Fix
 setFixDirectory filePath f = f { stFixDirectory = filePath }
 
-writeState :: Path -> Fix -> IO ()
-writeState fixDirectory = encodeFile $ fixDirectory </> fixFile
+writeState :: Path -> (String, Fix) -> IO ()
+writeState fixDirectory (str, st) = do
+    encodeFile (fixDirectory </> fixFile) st
+    when (stVerbosity st == Verbose) $ do
+        print st
+        putStr "\n   Usage log: \n"
+        putStr str
 
 main :: IO ()
 main = do
@@ -53,25 +65,37 @@ main = do
     let fixDirectory = optFixPath command </> fixDirectoryName
     fixDirectoryAvailable <-  doesDirectoryExist $ fixDirectory
     unless fixDirectoryAvailable $ runInit (optFixPath command) (optCommand command)
-    writeState fixDirectory =<< execStateT (execute command) =<< readState fixDirectory
+    writeState fixDirectory =<< runST (execute command) =<< readState fixDirectory
 --     createDirectoryIfMissing True realp
 
 execute :: Options -> ST ()
 execute opts = do
     updateState opts
+    log $ optCommand opts
     run (optCommand opts)
-    logState (optVerbosity opts)
 
 runInit :: Path -> Command -> IO ()
-runInit fixPath' (Command Init _ _) = do
+runInit fixPath' (Command Init _) = do
     createDirectoryIfMissing False $ fixPath' </> fixDirectoryName
+    createDirectoryIfMissing False $ fixPath' </> fixDirectoryName </> setPrefix <> "base"
 runInit _ _ = error "Cant found fix directory, try fix init, or fix -f path to fix directory"
 
     
 run :: Command -> ST ()
-run (Command Add OLayer layerName) = do
-    createIfMissing OLayer layerName
-    run (Command Switch OLayer layerName)
+run (Command (Add context) name) = do
+    create context name
+run (Command Init _) = return ()
+run (Command Save _) = do
+    n <- getLayerName
+    wd <- getWorkDirectory
+    pos <- stPosition <$> get
+    new <- liftIO $ load n wd :: ST (Layer Body)
+    old <- getWorkState pos
+    fd <- getFixDirectory
+    let changes = getPatch old new
+    liftIO $ save (makeLayerPath fd pos) changes
+    return ()
+{--
 run (Command Switch OLayer layerName) = do
     isLayer <- doesExists OLayer layerName
     if isLayer
@@ -96,24 +120,74 @@ run (Command View Work _) = do
     where
       onlyLayers ('®':'®':_) = True
       onlyLayers _ = False
-    
-
-
+--}  
 run _ = liftIO $ printf "command not realizaded"
 
-log :: String -> StateT Fix IO ()
-log x = liftIO . printf $ x <> "\n"
+log :: Show a => a -> ST ()
+log x = tell $ show x <> "\n"
 
+create :: Context -> Name -> ST ()
+create SimpleLayer name = do
+    fixDirectory <- getFixDirectory
+    s <- getLayersName
+    liftIO $ createDirectoryIfMissing True $ fixDirectory </> setPrefix <> s </> "layers"
+    addLayer name
+    run (Command (Go DUp) "")
+create SetLayers name = do
+    run (Command Save "")
+    fixDirectory <- getFixDirectory
+    liftIO $ createDirectoryIfMissing True $ fixDirectory </> setPrefix <> name
+    newLayers name
+
+create _ _ = error "BUG: create"
+
+getWorkState :: Route -> ST (Layer Body)
+getWorkState [_] = (rBase . stLayers) <$> get
+getWorkState _rt = undefined
+
+getLayersName :: ST Name
+getLayersName = (rName . stLayers) <$> get
+
+makeLayerPath :: Path -> Route -> FilePath
+makeLayerPath fixDir rt = fixDir </> head rt </> "layers" </> fun
+  where
+    fun = foldl1 (\x y -> x <> "." <> y) rt
+
+getLayerName :: ST Name
+getLayerName = (last . stPosition) <$> get
+
+getLayers :: ST Layers
+getLayers = stLayers <$> get
+
+emptyLayers :: Layers
+emptyLayers = Layers "base" "empty set of layers" (Layer ("base", [])) (Tree.Empty, [])
+
+cleanLayers :: ST ()
+cleanLayers = modify $ \s -> s { stLayers = emptyLayers }
+
+newLayers :: Name -> ST () 
+newLayers n = modify $ \s -> 
+  s { stLayers = emptyLayers { rBase = emptyLayer n
+                             , rName = n 
+                             } 
+    , stRoute = Map.empty
+    , stPosition = [n]
+    }
+
+addLayer :: Name -> ST ()
+addLayer n = modify $ \s ->
+  s { stPosition = n : (stPosition s)
+    }
+
+emptyLayer :: Name -> Layer Body
+emptyLayer n = Layer (n,[(".",D)])
+
+{--
 doesExists :: Context -> Layername -> ST Bool
 doesExists OLayer layerName = liftIO . doesDirectoryExist =<< prefix OLayer layerName
 doesExists _ _ = error $ "doesExists: not implemented"
 
-createIfMissing :: Context -> Layername -> ST ()
-createIfMissing OLayer layerName = do
-    fixDirectory <- getFixDirectory
-    liftIO $ createDirectoryIfMissing True $ fixDirectory </> layerPrefix <> layerName
-createIfMissing _ _ = liftIO . printf $ "createIfMissing: not implemented"
-
+--}
 getFixDirectory :: ST Path
 getFixDirectory = stFixDirectory <$> get
 
@@ -122,27 +196,16 @@ getWorkDirectory = dropFileName . dropTrailingPathSeparator . stFixDirectory <$>
 
 updateState :: Options -> ST ()
 updateState opts = modify $ 
-    \s -> s { stLastCommand = Just $ optCommand opts 
-           , stHistory = optCommand opts : take 100 (stHistory s)
-           , stVerbosity = optVerbosity opts
-           }
+    \s -> s { stVerbosity = optVerbosity opts }
 
-logState :: Verbosity -> ST ()
-logState Normal = return ()
-logState Verbose = liftIO . printf =<< show <$> get
-
-
+{--
 prefix :: Context -> Name -> ST Path
 prefix OLayer layerName = (</> layerPrefix <> layerName) <$> getFixDirectory 
 prefix Work _ = getWorkDirectory
 prefix _ _ = error "prefix"
 
-dotFilter :: [Path] -> [Path]
-dotFilter = filter (`notElem` [".", "..", ".fix"])
-
 clean :: Context -> Name -> ST ()
 clean c n = liftIO . cleanDirectory =<< prefix c n
-
 cleanDirectory :: Path -> IO ()
 cleanDirectory filePath = do
     cont <- getDirectoryContents filePath
@@ -158,6 +221,10 @@ cleanDirectory filePath = do
                   unless isDir $ throw (e :: SomeException)
                   cleanDirectory f
                   removeDirectory f
+
+--}
+dotFilter :: [Path] -> [Path]
+dotFilter = filter (`notElem` [".", "..", ".fix"])
 
 copyDirectory :: Path -> Path -> IO ()
 copyDirectory fromDir toDir = do
@@ -176,6 +243,7 @@ copyDirectory fromDir toDir = do
                    copyDirectory f t
 
     
+{--
 clone :: Context -> Context -> String -> String -> ST ()
 clone OLayer Work layerName _ = do
     fromContext <- prefix OLayer layerName
@@ -185,24 +253,28 @@ clone Work OLayer _ layerName = do
     fromContext <- prefix Work ""
     toContext <- prefix OLayer layerName
     liftIO $ copyDirectory fromContext toContext
+    --}
 
 
-clone _ _ _ _ = undefined
+-- clone _ _ _ _ = undefined
 
-type ST = StateT Fix IO
+type ST = WriterT String (StateT Fix IO)
+
+runST :: ST () -> Fix -> IO (String, Fix)
+runST = runStateT . execWriterT
 
 data Fix = 
-  Fix { stFixDirectory :: Path
-      , stCurrentLayer :: Maybe Path
-      , stLastCommand  :: Maybe Command
-      , stHistory      :: [Command]
-      , stContext      :: Context
-      , stVerbosity    :: Verbosity
+  Fix { stFixDirectory    :: Path
+      , stLayers          :: Layers
+      , stRoute           :: Map Route (Layer Body)
+      , stPosition        :: Route
+      , stVerbosity       :: Verbosity
       } deriving (Eq, Generic)
+
 instance Binary Fix
 
 instance Show Fix where
-    show x = "\ncommand: " <> (show $ stLastCommand x)
-           <> "\nfixDirectory: " <> (show $ stFixDirectory x) 
-           <> "\ncurrentLayer: " <> (show $ stCurrentLayer x)
+    show x = "\nfixDirectory: " <> (show $ stFixDirectory x) 
+           <> "\ncurrentLayer: " <> (show $ stLayers x) <> "\n"
+           <> "\nposition: " <> (show $ stPosition x)
            -- <> "history: \n" <> (unlines $ map show (take 10 $ stHistory x))

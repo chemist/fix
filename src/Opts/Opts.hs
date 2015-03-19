@@ -2,9 +2,10 @@
 module Opts.Opts where
 
 import Options.Applicative
-import Data.Map
+import Data.Map hiding (null)
 import Data.Binary
 import GHC.Generics (Generic)
+import Tree
 
 {--
 fix
@@ -16,7 +17,7 @@ fix describe $name
 fix add $name
   fix save
   добавить слой поверх текущего
-  переключиться на него
+  fix up
 fix remove $name
   удалить слой
 fix remove
@@ -46,39 +47,37 @@ parseOptions = execParser (info (Options <$> parseCommand <*> verbosity <*> (fix
 
 parseCommand :: Parser Command
 parseCommand = subparser
-  (  command "add" (info (Command Add <$> subjects <*> sm "NAME")
+  (  command "add" (info (Command <$> (Add <$> (parseContext <|> pure SimpleLayer)) <*> sm "NAME")
       ( progDesc "add" ))
-  <> command "switch" (info (Command Switch <$> subjects <*> sm "NAME")
-      ( progDesc "switch" ))
-  <> command "delete" (info (Command Delete <$> subjects <*> sm "NAME")
-      ( progDesc "delete" ))
-  <> command "view" (info ((Command View <$> subjects  <*> sm "NAME") <|> (Command View <$> pure Work <*> pure ""))
-      ( progDesc "view" ))
-  <> command "pwd" (info (Command Pwd <$> pure Work <*> pure "")
-      ( progDesc "pwd" ))
-  <> command "init" (info (Command Init <$> pure Work <*> pure "")
-      ( progDesc "init" ))
-  <> command "save" (info (Command Save <$> pure Work <*> pure "")
+  <> command "save" (info (Command Save <$> pure "")
       ( progDesc "save" ))
+  <> command "init" (info (Command Init <$> pure "")
+      ( progDesc "init" ))
+  <> command "go" (info (Command <$> (Go <$> parseDirection) <*> pure "")
+      ( progDesc "go up | down | left | right | way ..." ))
+  ) <|> pure (Command View "")
+  where
+    sm = strArgument . metavar
+
+parseContext :: Parser Context
+parseContext = subparser ( command "set" (info (pure SetLayers) (progDesc "set"))) 
+
+parseDirection :: Parser Direction
+parseDirection = subparser
+  (  command "up"    (info (pure DUp)       ( progDesc "up"))
+  <> command "down"  (info (pure DDown)     ( progDesc "down"))
+  <> command "right" (info (pure DLeft)     ( progDesc "right"))
+  <> command "left"  (info (pure DRight) ( progDesc "left"))
+  <> command "way"   (info (ByRoute <$> (routeFromString <$> sm "ROUTE")) ( progDesc "way"))
   )
   where
     sm = strArgument . metavar
 
-subjects :: Parser Context
-subjects = subparser
-  (  command "host"    (info (pure Host) 
-      ( progDesc "host")) <> metavar "CONTEXT: host | layer | user | service | check | template"
-  <> command "layer"    (info (pure OLayer) 
-      ( progDesc "layer")) 
-  <> command "user"    (info (pure User)
-      ( progDesc "user"))
-  <> command "service" (info (pure Service)
-      ( progDesc "service"))
-  <> command "check"   (info (pure Check)
-      ( progDesc "check"))
-  <> command "template" (info (pure Template)
-      ( progDesc "template"))
-  )
+routeFromString :: String -> Route
+routeFromString t 
+  | null s'   = [l]
+  | otherwise = l : routeFromString (tail s')
+  where (l, s') = span (/= '.') t
 
 data Verbosity = Normal | Verbose deriving (Show, Eq, Generic)
 
@@ -102,13 +101,20 @@ data Options = Options
 
 instance Binary Options
 
-data Command = Command Action Context String
+data Command = Command Action String
   deriving (Show, Eq, Generic)
 
 instance Binary Command
 
-data Action = Add 
-            | Switch 
+data Direction = DUp | DDown | ByRoute Route | DLeft | DRight deriving (Show, Eq, Generic)
+
+instance Binary Direction
+
+data Context = SetLayers | SimpleLayer | Work deriving (Show, Eq, Generic)
+instance Binary Context
+
+data Action = Add Context
+            | Go Direction
             | Delete 
             | View 
             | Pwd 
@@ -118,21 +124,8 @@ data Action = Add
 
 instance Binary Action 
 
-data Context
-  = Host
-  | OLayer
-  | User
-  | Service
-  | Check
-  | Template
-  | Work
-  deriving (Show, Eq, Generic)
-
-instance Binary Context
-
 type Path = String
 type Hostname = String
-type Layername = String
 type Weight = Int
 type Env = Map String String
 

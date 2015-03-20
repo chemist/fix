@@ -47,10 +47,12 @@ parseOptions = execParser (info (Options <$> parseCommand <*> verbosity <*> (fix
 
 parseCommand :: Parser Command
 parseCommand = subparser
-  (  command "add" (info (Command <$> (Add <$> (parseContext <|> pure SimpleLayer)) <*> sm "NAME")
+  (  command "add" (info (Command <$> (pure $ Add LayerContext) <*> sm "NAME")
       ( progDesc "add" ))
   <> command "save" (info (Command Save <$> pure "")
       ( progDesc "save" ))
+  <> command "bucket" (info ((Command BucketOpt <$> sm "NAME") <|> (Command BucketOpt <$> pure ""))
+      ( progDesc "bucket" ))
   <> command "init" (info (Command Init <$> pure "")
       ( progDesc "init" ))
   <> command "go" (info (Command <$> (Go <$> parseDirection) <*> pure "")
@@ -60,7 +62,7 @@ parseCommand = subparser
     sm = strArgument . metavar
 
 parseContext :: Parser Context
-parseContext = subparser ( command "set" (info (pure SetLayers) (progDesc "set"))) 
+parseContext = subparser ( command "bucket" (info (pure BucketContext) (progDesc "bucket"))) 
 
 parseDirection :: Parser Direction
 parseDirection = subparser
@@ -110,11 +112,12 @@ data Direction = DUp | DDown | ByRoute Route | DLeft | DRight deriving (Show, Eq
 
 instance Binary Direction
 
-data Context = SetLayers | SimpleLayer | Work deriving (Show, Eq, Generic)
+data Context = BucketContext | LayerContext | WorkContext deriving (Show, Eq, Generic)
 instance Binary Context
 
 data Action = Add Context
             | Go Direction
+            | BucketOpt
             | Delete 
             | View 
             | Pwd 

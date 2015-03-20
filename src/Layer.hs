@@ -27,15 +27,20 @@ import Prelude hiding (readFile, writeFile)
 import Tree
 
 instance Contexted CLayer where
-    index (CLayer _ n) = n
+    index (CLayer _ n _) = n
+
+instance Contexted (Layer Body) where
+    index (Layer (n, _)) = n
 
 type Comment = String
 
-data CLayer = CLayer Comment Name deriving (Show, Eq, Generic)
+type HashName = String
+
+data CLayer = CLayer Comment Name HashName deriving (Show, Eq, Generic)
 
 instance Binary CLayer
 
-data Layers = Layers
+data Bucket = Bucket
   { rName    :: Name
   , rComment :: String
   , rBase    :: Layer Body
@@ -43,7 +48,7 @@ data Layers = Layers
   } deriving (Eq, Show, Generic)
 
 
-instance Binary Layers
+instance Binary Bucket
 
 data Body = Body
   { bMD5   :: ByteString

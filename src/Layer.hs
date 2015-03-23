@@ -129,6 +129,10 @@ class Saveable a where
     restore :: FilePath -> IO a
     save :: FilePath -> a -> IO ()
 
+instance Saveable Bucket where
+    save = encodeFile
+    restore = decodeFile 
+
 instance Saveable Body where
     restore f = do
         bs <- readFile f

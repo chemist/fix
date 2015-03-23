@@ -55,9 +55,15 @@ parseCommand = subparser
       ( progDesc "bucket" ))
   <> command "init" (info (Command Init <$> pure "")
       ( progDesc "init" ))
-  <> command "go" (info (Command <$> (Go <$> parseDirection) <*> pure "")
-      ( progDesc "go up | down | left | right | way ..." ))
+  <> command "go" (info (   (Command <$> (Go <$> parseDirection) <*> pure "")
+                        <|> parseRoute )
+      ( progDesc "go up | down | left | right | route ..." ))
   ) <|> pure (Command View "")
+  where
+    sm = strArgument . metavar
+
+parseRoute :: Parser Command 
+parseRoute = Command <$> (Go <$> (ByRoute <$> (routeFromString <$> sm "ROUTE"))) <*> pure ""
   where
     sm = strArgument . metavar
 
@@ -70,10 +76,7 @@ parseDirection = subparser
   <> command "down"  (info (pure DDown)     ( progDesc "down"))
   <> command "right" (info (pure DLeft)     ( progDesc "right"))
   <> command "left"  (info (pure DRight) ( progDesc "left"))
-  <> command "way"   (info (ByRoute <$> (routeFromString <$> sm "ROUTE")) ( progDesc "way"))
   )
-  where
-    sm = strArgument . metavar
 
 routeFromString :: String -> Route
 routeFromString t 

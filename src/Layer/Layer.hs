@@ -37,7 +37,10 @@ type Comment = String
 
 type HashName = String
 
-data CLayer = CLayer Comment Name HashName deriving (Show, Eq, Generic)
+data CLayer = CLayer Comment Name HashName deriving (Eq, Generic)
+
+instance Show CLayer where
+    show _ = ""
 
 instance Binary CLayer
 
@@ -81,8 +84,8 @@ newtype DTree a = DTree (AnchoredDirTree a) deriving (Eq, Generic, Binary)
 instance Show a => Show (DTree a) where
     show (DTree (anc :/ f)) = anc ++ tail (unlines $ draw f)
       where
-        draw (Dir n xs) = n : drawSubtree xs
-        draw (File n x) = [n <> " " <> show x]
+        draw (Dir n xs) = ("D " <> n) : drawSubtree xs
+        draw (File n x) = ["F " <> n <> "  " <> show x]
         draw (Failed{}) = ["failed"]
 
         drawSubtree [] = []

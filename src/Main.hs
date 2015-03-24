@@ -114,6 +114,27 @@ run (Command DiffAction _) =
     ifM isWorkDirectoryClean
         showDiff
         (return ())
+run (Command View _) = do
+    liftIO $ printf   "----- Available buckets ----- \n"
+    run (Command BucketOpt "")
+    liftIO $ printf $ "----------------------------- \n"
+    (t, _) <- Tree.top . rTree <$> getBucket
+    liftIO $ printf $ "----- Layers tree: ---------- \n" <> show t
+    route <- routeToString . Tree.route . rTree <$> getBucket
+    liftIO $ printf $ "----------------------------- \n"
+    liftIO $ printf $ "Active layer: " <> route <> "\n"
+    liftIO $ printf $ "----------------------------- \n"
+    dTree <- fromLayer <$> getAllLayersFromBucket 
+    liftIO $ printf $ "----- Filesystem tree: ------ \n"
+    liftIO $ printf $ show dTree
+    v <- Tree.value . rTree <$> getBucket
+    (r, a, ra) <- diffShow <$> loadChange (fromJust v)
+    liftIO $ printf $ "----- Current layer: -------- \n"
+    msg r
+    msg a
+    msg ra
+
+
 run _ = liftIO $ printf "command not realizaded"
 
 goByRoute :: Name -> ST ()
@@ -142,7 +163,6 @@ showDiff = do
     old <- getAllLayersFromBucket
     new <- liftIO $ load n wd :: ST (Layer Body)
     let changes = getPatch old new
-    msg changes
     let (r, a, ra) = diffShow changes
     msg "Diff result..."
     msg r
@@ -376,7 +396,6 @@ goUp = do
              -- Second -- add
              Changes changes <- loadChange $ fromJust $ Tree.value new
              patchWorkSpace DUp changes
-             msg $ "changes: " <> show changes
              modify $ \s -> s { stBucket = bucket { rTree = new }}
 
 goDown :: ST ()
@@ -392,7 +411,6 @@ goDown = do
              old <- rTree <$> getBucket
              Changes changes <- loadChange $ fromJust (Tree.value old)
              patchWorkSpace DDown changes
-             msg $ "changes: " <> show changes
              modify $ \s -> s { stBucket = bucket { rTree = new }}
 
 patchWorkSpace :: Direction -> [Diff (FilePath, DF Body)] -> ST ()
@@ -464,10 +482,10 @@ instance Binary Fix
 instance Show Fix where
     show x = "\nfix directory: " <> (show $ stFixDirectory x) 
            <> "\nbucket: " <> (rName . stBucket $ x ) <> "\n"
-           <> "way: " <> (route . Tree.route . rTree . stBucket $ x ) <> "\n"
+           <> "way: " <> (routeToString . Tree.route . rTree . stBucket $ x ) <> "\n"
            <> (show $ (rTree . stBucket) x) <> "\n"
-      where
-        route [] = "-"
-        route xs = foldl1 (\a b -> a <> "." <> b) xs
-           -- <> "history: \n" <> (unlines $ map show (take 10 $ stHistory x))
+
+routeToString :: Route -> String
+routeToString [] = "-"
+routeToString xs = foldl1 (\a b -> a <> "." <> b) xs
            

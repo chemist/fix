@@ -10,8 +10,6 @@ import Data.Tree
 {--
 fix
   показать рабочий стэк слоев с файлами
-fix show
-  показать все слои с файлами
 fix describe $name
   показать слой $name с файлами
 fix add $name

@@ -3,7 +3,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
-module Tree where
+module Data.Tree where
 
 import Data.Maybe (fromJust)
 import Data.Monoid 

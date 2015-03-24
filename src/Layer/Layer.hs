@@ -4,7 +4,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-module Layer where
+module Layer.Layer where
 
 import Data.Binary 
 import System.Directory.Tree
@@ -19,12 +19,13 @@ import Crypto.Hash.MD5
 import Data.Monoid ((<>))
 import Control.Monad
 import Data.Algorithm.Diff 
-import Data.List (delete)
+import Data.List (delete, sortBy)
+import qualified Data.Set as Set
 import GHC.IO.Exception
 import Prelude hiding (readFile, writeFile)
 
 -- import Opts.Opts
-import Tree
+import Data.Tree
 
 instance Contexted CLayer where
     index (CLayer _ n _) = n
@@ -56,7 +57,7 @@ data Body = Body
   , bMode  :: FileMode
   , bOwner :: UserID
   , bGroup :: GroupID
-  } deriving (Eq, Generic)
+  } deriving (Eq, Generic, Ord)
 
 instance Show Body where
     show _ = ""
@@ -90,7 +91,7 @@ instance Show a => Show (DTree a) where
 
         shift first other = zipWith (++) (first : repeat other)
 
-data DF a = D | F a deriving (Show, Eq, Generic)
+data DF a = D | F a deriving (Show, Eq, Ord, Generic)
 
 instance Binary a => Binary (DF a)
 
@@ -196,10 +197,39 @@ instance Binary a => Binary (Changes a)
 instance Binary a => Binary (Layer a)
 
 getPatch :: (Show a, Eq a) => Layer a -> Layer a -> Changes a
-getPatch (Layer (_, old)) (Layer (_, new)) = Changes (filter isDifference $ getDiff old new)
+getPatch x y = Changes (filter isDifference $ getDiff xs ys)
   where
+    (Layer (_, xs)) = sortLayer x
+    (Layer (_, ys)) = sortLayer y
     isDifference Both{} = False
     isDifference _ = True
+
+instance Eq a => Ord (Diff (FilePath, a)) where
+    compare a b = compare (getFp a) (getFp b)
+      where
+        getFp (First (f, _)) = f
+        getFp (Second (f, _)) = f
+        getFp _ = error "can't use Both here"
+
+diffShow :: (Show a, Eq a, Ord a) => Changes a -> (DTree a, DTree a, DTree a)
+diffShow (Changes xs) = diffShow' (Set.empty, Set.empty, Set.empty) xs
+    where
+      diffShow' (l, r, lr) [] = ( fromLayer $ Layer ("(-)" , Set.toList $ Set.map fun l  )
+                                , fromLayer $ Layer ("(+)" , Set.toList $ Set.map fun r  )
+                                , fromLayer $ Layer ("(+-)", Set.toList $ Set.map fun lr )
+                                )
+      diffShow' (l, r, lr) (p@First{}:ys) = diffShow' (insertL (l, r, lr) p) ys
+      diffShow' (l, r, lr) (p@Second{}:ys) = diffShow' (insertR (l, r, lr) p) ys
+      diffShow' (l, r, lr) (_:ys) = diffShow' ( l, r, lr) ys
+      fun (First a) = a
+      fun (Second a) = a
+      fun _ = error "can't be Both here"
+      insertL (l, r, lr) p = if (Set.member p r)
+                                then (l             , Set.delete p r, Set.insert p lr)
+                                else (Set.insert p l,              r,              lr)
+      insertR (l, r, lr) p = if (Set.member p l)
+                                then (Set.delete p l,              r, Set.insert p lr)
+                                else (l             , Set.insert p r,              lr)
 
 data PatchType = Apply | Undo deriving (Eq, Show)
 
@@ -213,6 +243,12 @@ patch pt (Layer (anc, xs)) (Changes cs) = Layer (anc, patched)
 
 testPatch :: (Show a, Eq a) => Layer a -> Changes a -> Bool
 testPatch l p = l == patch Undo (patch Apply l p) p
+
+sortLayer :: Layer a -> Layer a
+sortLayer (Layer (x, xs)) = Layer (x, sortBy fun xs)
+  where
+  fun a b = compare (fst a) (fst b)
+
 
 
 

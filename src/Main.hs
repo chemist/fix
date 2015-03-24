@@ -1,11 +1,12 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
 import System.Directory
 import System.FilePath
 -- import System.Posix.Files
 import Control.Monad.State
-import Control.Monad.Writer
+import Control.Monad.Writer hiding (First)
 import Data.Binary (decodeFile, encodeFile, Binary)
 import GHC.Generics (Generic)
 import Text.Printf
@@ -17,13 +18,13 @@ import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified Data.ByteString as B 
 import Data.ByteString.Builder (word8Hex, Builder, toLazyByteString)
 import Data.Word (Word8)
-import Data.Either (rights, lefts)
-import Data.List (sortBy)
+import Data.Maybe
+import Data.Algorithm.Diff 
 
 import Prelude hiding (log)
-import Layer 
-import Tree (Route, Name)
-import qualified Tree
+import Layer.Layer 
+import Data.Tree (Route, Name)
+import qualified Data.Tree as Tree
 
 import Opts.Opts
 
@@ -107,8 +108,12 @@ run (Command Save _) = do
          (Nothing, _)  -> msg "Changes not saved, add layer first"
          (Just hash', _) -> liftIO $ save (layersPath </> hash') changes
 run (Command (Go (ByRoute route')) _) = whenClean (goRoute route' >> cleanWorkSpace >> restoreWorkSpaceFromBucket) "you must save work directory"
-run (Command (Go DUp) _) = whenClean (goUp >> cleanWorkSpace >> restoreWorkSpaceFromBucket) "you must save work directory"
-run (Command (Go DDown) _) = whenClean (goDown >> cleanWorkSpace >> restoreWorkSpaceFromBucket) "you must save work directory"
+run (Command (Go DUp) _) = whenClean goUp  "you must save work directory"
+run (Command (Go DDown) _) = whenClean goDown  "you must save work directory"
+run (Command DiffAction _) =
+    ifM isWorkDirectoryClean
+        showDiff
+        (return ())
 run _ = liftIO $ printf "command not realizaded"
 
 goByRoute :: Name -> ST ()
@@ -128,13 +133,21 @@ isWorkDirectoryClean = do
     wd <- getWorkDirectory
     old <- getAllLayersFromBucket
     new <- liftIO $ load n wd :: ST (Layer Body)
-    return $ sortLayer old == sortLayer new
+    return $ getPatch old new == Changes []
 
-sortLayer :: Layer Body -> Layer Body
-sortLayer (Layer (x, xs)) = Layer (x, sortBy fun xs)
-  where
-  fun a b = compare (fst a) (fst b)
-
+showDiff :: ST ()
+showDiff = do
+    n <- getLayerName
+    wd <- getWorkDirectory
+    old <- getAllLayersFromBucket
+    new <- liftIO $ load n wd :: ST (Layer Body)
+    let changes = getPatch old new
+    msg changes
+    let (r, a, ra) = diffShow changes
+    msg "Diff result..."
+    msg r
+    msg a
+    msg ra
 
 
 -- | create new layer 
@@ -231,13 +244,7 @@ getLayers f = do
     return $ foldl (patch Apply) base changes
     where
       loadChanges :: [CLayer] -> ST [Changes Body]
-      loadChanges xs = do
-          layersPath <- getLayersPath
-          changes <- liftIO $ forM xs (loadChange layersPath)
-          when (not . null $ lefts changes) $ log $ "ERROR: " <> show (lefts changes)
-          return $ rights changes
-      loadChange :: Path -> CLayer -> IO (Either SomeException (Changes Body))
-      loadChange lp (CLayer _ _ h) = try $ restore (lp </> h)
+      loadChanges = mapM loadChange 
 
 restoreBucket :: Name -> ST ()
 restoreBucket name = do
@@ -249,6 +256,13 @@ restoreBucket name = do
            bucket <- liftIO $ restore $ fixDirectory </> name </> "bucket"
            modify $ \s -> s { stBucket = bucket }
        else msg "bucket not found"
+
+loadChange :: CLayer -> ST (Changes Body)
+loadChange (CLayer _ _ h) = do
+    layersPath <- getLayersPath
+    -- TODO: catch errors here
+    either (\(_ :: SomeException) -> (Changes [])) id <$> (liftIO $ try $ restore (layersPath </> h))
+
 
 restoreWorkSpaceFromBucket :: ST ()
 restoreWorkSpaceFromBucket = do
@@ -356,7 +370,14 @@ goUp = do
     bucket <- getBucket
     case Tree.goLevel (rTree bucket) of
          Nothing -> return ()
-         Just new -> modify $ \s -> s { stBucket = bucket { rTree = new }}
+         Just new -> do
+             -- get value from new tree
+             -- First -- remove
+             -- Second -- add
+             Changes changes <- loadChange $ fromJust $ Tree.value new
+             patchWorkSpace DUp changes
+             msg $ "changes: " <> show changes
+             modify $ \s -> s { stBucket = bucket { rTree = new }}
 
 goDown :: ST ()
 goDown = do
@@ -364,7 +385,62 @@ goDown = do
     bucket <- getBucket
     case Tree.goUp (rTree bucket) of
          Nothing -> return ()
-         Just new -> modify $ \s -> s { stBucket = bucket { rTree = new }}
+         Just new -> do
+             -- get value from old tree
+             -- First - add
+             -- Second -- remove
+             old <- rTree <$> getBucket
+             Changes changes <- loadChange $ fromJust (Tree.value old)
+             patchWorkSpace DDown changes
+             msg $ "changes: " <> show changes
+             modify $ \s -> s { stBucket = bucket { rTree = new }}
+
+patchWorkSpace :: Direction -> [Diff (FilePath, DF Body)] -> ST ()
+patchWorkSpace d xs = do
+    -- split to 2 line, remove first, restore second
+    let (f, s) = (filter (fun d) xs, filter (not . (fun d)) xs)
+        fun DUp First{} = True
+        fun DDown Second{} = True
+        fun _ _ = False
+    patchWorkSpace' (length f + 1) d f
+    patchWorkSpace' (length s + 1) d s
+    where
+      -- | recurse allowed only i times, where i -> length xs + 1
+      patchWorkSpace' :: Int -> Direction -> [Diff (FilePath, DF Body)] -> ST ()
+      patchWorkSpace' _ _ [] = return ()
+      patchWorkSpace' 0 _ _ = error "problem when workWithFile"
+      patchWorkSpace' i y ys = do
+          let queue = map (workWithFile y) ys
+          result <- sequence queue
+          let new = map snd . filter (not . fst) $ zip result ys
+          patchWorkSpace' (i - 1) y new
+
+      workWithFile :: Direction -> Diff (FilePath, DF Body) -> ST Bool
+      workWithFile DDown (First (p, f)) = restoreFile p f
+      workWithFile DDown (Second (p, f)) = rmFile p f
+      workWithFile DUp   (First (p, f)) = rmFile p f
+      workWithFile DUp   (Second (p, f)) = restoreFile p f
+      workWithFile _ _ = error "not implemented in workWithFile"
+      
+      rmFile :: FilePath -> DF a -> ST Bool
+      rmFile f D = do
+          wd <- getWorkDirectory
+          e <- liftIO $ try $ removeDirectory (normalise $ wd </> f)
+          return $ either (const False) (const True) (e :: Either SomeException ())
+      rmFile f _ = do
+          wd <- getWorkDirectory
+          e <- liftIO $ try $ removeFile (normalise $ wd </> f)
+          return $ either (const False) (const True) (e :: Either SomeException ())
+      
+      restoreFile :: FilePath -> DF Body -> ST Bool
+      restoreFile f D = do
+          wd <- getWorkDirectory
+          e <- liftIO $ try $ createDirectory (normalise $ wd </> f)
+          return $ either (const False) (const True) (e :: Either SomeException ())
+      restoreFile f (F b) = do
+          wd <- getWorkDirectory
+          e <- liftIO $ try $ save (normalise $ wd </> f) b
+          return $ either (const False) (const True) (e :: Either SomeException ())
 
 goRoute :: Route -> ST ()
 goRoute route' = do

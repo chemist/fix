@@ -5,7 +5,7 @@ import Options.Applicative
 import Data.Map hiding (null)
 import Data.Binary
 import GHC.Generics (Generic)
-import Tree
+import Data.Tree
 
 {--
 fix
@@ -27,19 +27,13 @@ fix up
   переключиться на слой выше если есть
 fix down 
   переключиться на слой ниже если есть
-fix swap
-  переключиться между текущим и предыдущим слоем
-fix swap $name
+fix diff
 fix save
   сохранить текущий слой
 fix clean
   очистить рабочую директорию без сохранения
-  очистить стэк слоев
 fix destroy $name
   физически удалить слой
-fix save and clean
-  fix save
-  fix clean
 --}
 
 parseOptions :: IO Options
@@ -51,6 +45,8 @@ parseCommand = subparser
       ( progDesc "add" ))
   <> command "save" (info (Command Save <$> pure "")
       ( progDesc "save" ))
+  <> command "diff" (info (Command DiffAction <$> pure "")
+      ( progDesc "diff" ))
   <> command "bucket" (info ((Command BucketOpt <$> sm "NAME") <|> (Command BucketOpt <$> pure ""))
       ( progDesc "bucket" ))
   <> command "init" (info (Command Init <$> pure "")
@@ -121,6 +117,7 @@ instance Binary Context
 data Action = Add Context
             | Go Direction
             | BucketOpt
+            | DiffAction
             | Delete 
             | View 
             | Pwd 

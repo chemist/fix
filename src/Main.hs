@@ -119,20 +119,25 @@ run (Command View _) = do
     run (Command BucketOpt "")
     liftIO $ printf $ "----------------------------- \n"
     (t, _) <- Tree.top . rTree <$> getBucket
-    liftIO $ printf $ "----- Layers tree: ---------- \n" <> show t
-    route <- routeToString . Tree.route . rTree <$> getBucket
-    liftIO $ printf $ "----------------------------- \n"
-    liftIO $ printf $ "Active layer: " <> route <> "\n"
-    liftIO $ printf $ "----------------------------- \n"
-    dTree <- fromLayer <$> getAllLayersFromBucket 
-    liftIO $ printf $ "----- Filesystem tree: ------ \n"
-    liftIO $ printf $ show dTree
+    when (t /= Tree.Empty) $ do
+      liftIO $ printf $ "----- Layers tree: ---------- \n" <> show t
+      route <- routeToString . Tree.route . rTree <$> getBucket
+      when (route /= "") $ do
+        liftIO $ printf $ "----------------------------- \n"
+        liftIO $ printf $ "Active layer: " <> route <> "\n"
+        liftIO $ printf $ "----------------------------- \n"
+        dTree <- fromLayer <$> getAllLayersFromBucket 
+        liftIO $ printf $ "----- Filesystem tree: ------ \n"
+        liftIO $ printf $ show dTree
     v <- Tree.value . rTree <$> getBucket
-    (r, a, ra) <- diffShow <$> loadChange (fromJust v)
-    liftIO $ printf $ "----- Current layer: -------- \n"
-    msg r
-    msg a
-    msg ra
+    maybe (return ()) diffs v
+      where
+        diffs v = do
+          (r, a, ra) <- diffShow <$> loadChange v
+          liftIO $ printf $ "----- Current layer: -------- \n"
+          msg r
+          msg a
+          msg ra
 
 
 run _ = liftIO $ printf "command not realizaded"

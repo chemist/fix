@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Opts.Opts where
 
-import Options.Applicative
+import Options.Applicative 
 import Data.Map hiding (null)
 import Data.Binary
 import GHC.Generics (Generic)
@@ -35,29 +35,42 @@ fix destroy $name
 --}
 
 parseOptions :: IO Options
-parseOptions = execParser (info (Options <$> parseCommand <*> verbosity <*> (fixPath)) idm)
+parseOptions = 
+  customExecParser (prefs showHelpOnError)
+    (info (helper <*> (Options <$> parseCommand <*> verbosity <*> fixPath)) description)
+  where
+    description = 
+      (  fullDesc
+      <> header "fix tool, util for manage your infrastructure."
+      <> progDesc "Do it simple."
+      ) 
 
 parseCommand :: Parser Command
 parseCommand = subparser
-  (  command "add" (info (Command <$> (pure $ Add LayerContext) <*> sm "NAME")
-      ( progDesc "add" ))
+  (  command "add" (info (helper <*> (Command <$> (pure $ Add LayerContext) <*> sm "NAME"))
+      ( progDesc "create new layer, and switch to him" ) )
   <> command "save" (info (Command Save <$> pure "")
-      ( progDesc "save" ))
+      ( progDesc "save current layer" ))
   <> command "diff" (info (Command DiffAction <$> pure "")
-      ( progDesc "diff" ))
-  <> command "bucket" (info ((Command BucketOpt <$> sm "NAME") <|> (Command BucketOpt <$> pure ""))
-      ( progDesc "bucket" ))
+      ( progDesc "show diff between workspace and active layer" ))
+  <> command "bucket" (info (helper <*> (Command BucketOpt <$> sm "NAME"))
+      ( progDesc "create new or switch to exist bucket" ))
+  <> command "buckets" (info (Command BucketOpt <$> pure "")
+      ( progDesc "show list of buckets" ))
   <> command "init" (info (Command Init <$> pure "")
-      ( progDesc "init" ))
-  <> command "go" (info (   (Command <$> (Go <$> parseDirection) <*> pure "")
-                        <|> parseRoute )
-      ( progDesc "go up | down | left | right | route ..." ))
-  ) <|> pure (Command View "")
+      ( progDesc "initialize fix space" ))
+  <> command "show" (info (Command View <$> pure "")
+      ( progDesc "show current bucket" ))
+  <> command "go" (info ( helper <*> (Command <$> (Go <$> parseDirection) <*> pure ""))
+      ( progDesc "switch to layer"))
+  )  
   where
     sm = strArgument . metavar
 
+
+
 parseRoute :: Parser Command 
-parseRoute = Command <$> (Go <$> (ByRoute <$> (routeFromString <$> sm "ROUTE"))) <*> pure ""
+parseRoute = (Command <$> (Go <$> (ByRoute <$> (routeFromString <$> sm "ROUTE"))) <*> pure "")
   where
     sm = strArgument . metavar
 
@@ -69,8 +82,14 @@ parseDirection = subparser
   (  command "up"    (info (pure DUp)       ( progDesc "up"))
   <> command "down"  (info (pure DDown)     ( progDesc "down"))
   <> command "right" (info (pure DLeft)     ( progDesc "right"))
-  <> command "left"  (info (pure DRight) ( progDesc "left"))
+  <> command "left"  (info (pure DRight)    ( progDesc "left"))
   )
+  <|> (ByRoute <$> (routeFromString <$> sm))
+  where
+    sm = strArgument 
+      ( metavar "ROUTE"
+      <> help "way in tree like: one.two.tree"
+      )
 
 routeFromString :: String -> Route
 routeFromString t 
@@ -84,7 +103,11 @@ instance Binary Verbosity
 
 fixPath :: Parser String
 fixPath = strOption
-  ( long "fix-path" <> short 'f' <> metavar "PATH" ) <|> pure ""
+  ( long "fix-path" 
+  <> short 'f' 
+  <> metavar "PATH" 
+  <> help "Path to workspace"
+  ) <|> pure ""
 
 verbosity :: Parser Verbosity
 verbosity = flag Normal Verbose
@@ -116,11 +139,10 @@ data Action = Add Context
             | Go Direction
             | BucketOpt
             | DiffAction
-            | Delete 
             | View 
-            | Pwd 
             | Init 
             | Save 
+            | Help
             deriving (Show, Eq, Generic)
 
 instance Binary Action 

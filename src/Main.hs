@@ -28,7 +28,6 @@ import qualified Data.Tree as Tree
 
 import Opts.Opts
 
-
 path :: FilePath
 path = "/Users/chemist/Develop/fix/tmp/"
 

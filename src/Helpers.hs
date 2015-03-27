@@ -15,11 +15,8 @@ import qualified Data.ByteString as B
 import Data.ByteString.Builder (word8Hex, Builder, toLazyByteString)
 import Data.Word (Word8)
 
-import Data.Layer 
-import Data.Tree (Route, Name)
-import Data.Types
+import Types
 import Opts.Opts
-import qualified Data.Tree as Tree
 
 path :: FilePath
 path = "/Users/chemist/Develop/fix/tmp/"
@@ -43,23 +40,23 @@ getBucketName :: ST Name
 getBucketName = rName <$> getBucket
 
 getLayerName :: ST Name
-getLayerName = Tree.index . rBase <$> getBucket 
+getLayerName = index . rBase <$> getBucket 
 
 getLayerHash :: ST (Maybe String)
 getLayerHash = do
-  v <- Tree.value . rTree <$> getBucket
+  v <- value . rTree <$> getBucket
   case v of
        Nothing -> return Nothing
        Just (CLayer _ _ h) -> return $ Just h
 
 getRoute :: ST Route
-getRoute = Tree.route . rTree <$> getBucket
+getRoute = route . rTree <$> getBucket
 
 isEmpty :: ST Bool
 isEmpty = do
     rt <- rTree <$> getBucket
     case rt of
-         (Tree.Empty, []) -> return $ True
+         (Empty, []) -> return $ True
          _ -> return $ False
 
 isBucketAvailable :: Name -> ST Bool
@@ -86,8 +83,8 @@ getLayers f = do
     tr <- rTree <$> getBucket 
     let cvalues = 
           if f
-             then Tree.values tr
-             else maybe [] (Tree.values) (Tree.goUp tr)
+             then values tr
+             else maybe [] (values) (goUp tr)
     changes <- loadChanges cvalues
     return $ foldl (patch Apply) base changes
     where
@@ -95,7 +92,7 @@ getLayers f = do
       loadChanges = mapM loadChange 
 
 emptyBucket :: Bucket
-emptyBucket = Bucket "base" "empty set of layers" (emptyLayer "base") (Tree.Empty, [])
+emptyBucket = Bucket "base" "empty set of layers" (emptyLayer "base") (Empty, [])
 
 cleanBucket :: ST ()
 cleanBucket = modify $ \s -> s { stBucket = emptyBucket }

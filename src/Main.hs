@@ -4,7 +4,6 @@ module Main where
 
 import System.Directory
 import System.FilePath
--- import System.Posix.Files
 import Control.Monad.State
 import Control.Monad.Writer hiding (First)
 import Data.Binary (decodeFile, encodeFile)
@@ -12,13 +11,13 @@ import Text.Printf
 import Control.Applicative
 
 import Prelude hiding (log)
-import Data.Types
 import Helpers
 import Command
+import Types hiding (goUp)
 
 import Opts.Opts
 
-readState :: Path -> IO Fix
+readState :: FilePath -> IO Fix
 readState fixDirectory = do
     let fixState = fixDirectory </> fixStateName
     stateAvailable <- doesFileExist fixState
@@ -26,10 +25,10 @@ readState fixDirectory = do
        then setFixDirectory fixDirectory <$> decodeFile fixState
        else return $ setFixDirectory fixDirectory emptyFix
 
-setFixDirectory :: Path -> Fix -> Fix
+setFixDirectory :: FilePath -> Fix -> Fix
 setFixDirectory filePath f = f { stFixDirectory = filePath }
 
-writeState :: Path -> (String, Fix) -> IO ()
+writeState :: FilePath -> (String, Fix) -> IO ()
 writeState fixDirectory (str, st) = do
     encodeFile (fixDirectory </> fixStateName) st
     when (stVerbosity st == Verbose) $ do
@@ -52,7 +51,7 @@ execute opts = do
     log $ optCommand opts
     run (optCommand opts)
 
-runInit :: Path -> Command -> IO ()
+runInit :: FilePath -> Command -> IO ()
 runInit fixPath' (Command Init _) = do
     createDirectoryIfMissing False $ fixPath' </> fixDirectoryName
     createDirectoryIfMissing False $ fixPath' </> fixDirectoryName </> "base"

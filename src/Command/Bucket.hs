@@ -2,14 +2,11 @@ module Command.Bucket where
 
 import System.Directory
 import System.FilePath
--- import System.Posix.Files
 import Control.Monad.State
 import Control.Applicative
 
 import Prelude hiding (log)
-import Data.Layer 
-import Data.Tree (Name)
-import Data.Types
+import Types
 import Helpers
 
 viewOrCreateOrSwitchBucket :: Name -> ST ()

@@ -24,7 +24,6 @@ import qualified Data.Set as Set
 import GHC.IO.Exception
 import Prelude hiding (readFile, writeFile)
 
--- import Opts.Opts
 import Data.Tree
 
 instance Contexted CLayer where

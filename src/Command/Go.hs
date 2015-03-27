@@ -2,39 +2,36 @@ module Command.Go where
 
 import System.Directory
 import System.FilePath
--- import System.Posix.Files
 import Control.Monad.State
 import Control.Applicative
 import Control.Exception.Base (try, SomeException)
 import Data.Maybe
 import Data.Algorithm.Diff 
 
-import Prelude hiding (log)
-import Data.Layer 
-import Data.Tree (Route)
-import Data.Types
-import qualified Data.Tree as Tree
+import Opts.Opts
+import Types hiding (goUp)
+import qualified Types as T
 import Helpers
 
-import Opts.Opts
+import Prelude hiding (log)
 
 goRoute :: Route -> ST ()
 goRoute route' = do
     log "go route"
     bucket <- getBucket
-    modify $ \s -> s { stBucket = bucket { rTree = (Tree.goClosest route' (rTree bucket)) }}
+    modify $ \s -> s { stBucket = bucket { rTree = (goClosest route' (rTree bucket)) }}
 
 goUp :: ST ()
 goUp = do
     log "go up"
     bucket <- getBucket
-    case Tree.goLevel (rTree bucket) of
+    case goLevel (rTree bucket) of
          Nothing -> return ()
          Just new -> do
              -- get value from new tree
              -- First -- remove
              -- Second -- add
-             Changes changes <- loadChange $ fromJust $ Tree.value new
+             Changes changes <- loadChange $ fromJust $ value new
              patchWorkSpace DUp changes
              modify $ \s -> s { stBucket = bucket { rTree = new }}
 
@@ -42,14 +39,14 @@ goDown :: ST ()
 goDown = do
     log "go down"
     bucket <- getBucket
-    case Tree.goUp (rTree bucket) of
+    case T.goUp (rTree bucket) of
          Nothing -> return ()
          Just new -> do
              -- get value from old tree
              -- First - add
              -- Second -- remove
              old <- rTree <$> getBucket
-             Changes changes <- loadChange $ fromJust (Tree.value old)
+             Changes changes <- loadChange $ fromJust (value old)
              patchWorkSpace DDown changes
              modify $ \s -> s { stBucket = bucket { rTree = new }}
 

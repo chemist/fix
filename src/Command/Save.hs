@@ -5,9 +5,8 @@ import Control.Monad.State
 import Data.Maybe
 
 import Prelude hiding (log)
-import Data.Layer 
-import Data.Types
 import Helpers
+import Types
 
 saveWorkSpaceAsLayer :: ST ()
 saveWorkSpaceAsLayer = do

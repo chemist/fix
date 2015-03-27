@@ -9,10 +9,13 @@ import Data.Maybe (fromJust)
 import Data.Monoid 
 import Data.Binary
 import GHC.Generics
--- import Control.Applicative
+ 
+type Name = String
+type Route = [Name]
 
--- import Debug.Trace
-
+class Contexted a where
+    index :: a -> Name
+ 
 data Move b a = Next (b a)
               | Level (b a)
               deriving (Eq, Generic)
@@ -26,9 +29,6 @@ instance (Show a, Show (b a)) => Show (Move b a) where
 type Moving b a = [Move b a]
 
 type Zipper b a = (b a, Moving b a)
-
-type Route = [Name]
-type Name = String
 
 class Zippers b where
     toZipper :: b a -> Zipper b a
@@ -49,9 +49,6 @@ data Tree a = Node a (Tree a) (Tree a)
             deriving (Functor, Eq, Generic)
 
 instance Binary a => Binary (Tree a)
-
-class Contexted a where
-    index :: a -> Name
 
 instance Contexted a => Monoid (Tree a) where
     mempty = Empty

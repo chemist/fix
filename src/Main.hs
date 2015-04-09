@@ -4,12 +4,15 @@ module Main where
 
 import System.Directory
 import System.FilePath
+import System.Environment
 import Control.Monad.State
 import Control.Monad.Writer hiding (First)
 import Data.Binary (decodeFile, encodeFile)
+import qualified Data.ByteString.Lazy as BL
 import Text.Printf
 import Control.Applicative
-import qualified Network.SSH.Client.SimpleSSH as SSH
+import qualified Network.SSH.Client.LibSSH2 as SSH
+import qualified Network.SSH.Client.LibSSH2.Foreign as SSH
 
 import Prelude hiding (log)
 import Helpers
@@ -79,16 +82,22 @@ run (Command View _) = view
 
 run _ = liftIO $ printf "command not realizaded"
 
-main1 :: IO ()
-main1 = print =<< SSH.runSimpleSSH simple
-  where
-    simple = SSH.withSessionKey 
-      "salt" 
-      22 
-      "/Users/chemist/.ssh/known_hosts" 
-      "chemist"
-      "/Users/chemist/.ssh/id_rsa.pub"
-      "/Users/chemist/.ssh/id_rsa"
-      ""
-      (flip SSH.execCommand "date")
-                              
+runCommand :: String -> String -> Int -> String -> IO ()
+runCommand login host port command =
+      ssh login host port $ \s -> 
+        SSH.withChannel s $ \ch -> do
+           SSH.channelExecute ch command
+           result <- SSH.readAllChannel ch
+           code <- SSH.channelExitStatus ch
+           print code
+           BL.putStr result
+
+ssh :: String -> String -> Int -> (SSH.Session -> IO a) -> IO ()
+ssh login host port actions = do
+      SSH.initialize True
+      home <- getEnv "HOME"
+      let known_hosts = home </> ".ssh" </> "known_hosts"
+          public = home </> ".ssh" </> "id_rsa.pub"
+          private = home </> ".ssh" </> "id_rsa"
+      void . SSH.withSSH2 known_hosts public private "" login host port $ actions
+      SSH.exit

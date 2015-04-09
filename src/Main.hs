@@ -9,6 +9,7 @@ import Control.Monad.Writer hiding (First)
 import Data.Binary (decodeFile, encodeFile)
 import Text.Printf
 import Control.Applicative
+import qualified Network.SSH.Client.SimpleSSH as SSH
 
 import Prelude hiding (log)
 import Helpers
@@ -78,3 +79,16 @@ run (Command View _) = view
 
 run _ = liftIO $ printf "command not realizaded"
 
+main1 :: IO ()
+main1 = print =<< SSH.runSimpleSSH simple
+  where
+    simple = SSH.withSessionKey 
+      "salt" 
+      22 
+      "/Users/chemist/.ssh/known_hosts" 
+      "chemist"
+      "/Users/chemist/.ssh/id_rsa.pub"
+      "/Users/chemist/.ssh/id_rsa"
+      ""
+      (flip SSH.execCommand "date")
+                              

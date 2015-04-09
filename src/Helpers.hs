@@ -1,7 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Helpers where
 
-import Control.Applicative
 import System.Directory
 import System.FilePath
 -- import System.Posix.Files
@@ -12,6 +11,7 @@ import qualified Crypto.Hash.MD5 as H
 import qualified Data.ByteString.Char8 as H 
 import qualified Data.ByteString.Lazy.Char8 as BL 
 import qualified Data.ByteString as B 
+import Control.Applicative
 import Data.ByteString.Builder (word8Hex, Builder, toLazyByteString)
 import Data.Word (Word8)
 

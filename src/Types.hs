@@ -9,7 +9,6 @@ module Types
 , CLayer(..)
 , Tree(..)
 , Layer(..)
-, Body
 , PatchType(..) 
 , goClosest
 , patch
@@ -19,8 +18,7 @@ module Types
 , diffShow
 , routeToString
 , runST
-, Saveable(..)
-, Loadable(..)
+, Restorable(..)
 , Changes(..)
 , DF(..)
 )

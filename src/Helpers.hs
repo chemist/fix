@@ -2,6 +2,7 @@
 module Helpers where
 
 import System.Directory
+import Data.Binary (decodeFile)
 import System.FilePath
 -- import System.Posix.Files
 import Control.Monad.State
@@ -71,13 +72,13 @@ getAllBuckets = do
       bucketFilter :: [Path] -> [Path]
       bucketFilter = filter (`notElem` [".", "..", fixStateName])
 
-getAllLayersFromBucket :: ST (Layer Body)
+getAllLayersFromBucket :: ST (Layer DF)
 getAllLayersFromBucket = getLayers True
 
-getParrentsLayersFromBucket :: ST (Layer Body)
+getParrentsLayersFromBucket :: ST (Layer DF)
 getParrentsLayersFromBucket = getLayers False
 
-getLayers :: Bool -> ST (Layer Body)
+getLayers :: Bool -> ST (Layer DF)
 getLayers f = do
     base <- rBase <$> getBucket
     tr <- rTree <$> getBucket 
@@ -88,7 +89,7 @@ getLayers f = do
     changes <- loadChanges cvalues
     return $ foldl (patch Apply) base changes
     where
-      loadChanges :: [CLayer] -> ST [Changes Body]
+      loadChanges :: [CLayer] -> ST [Changes DF]
       loadChanges = mapM loadChange 
 
 emptyBucket :: Bucket
@@ -97,7 +98,7 @@ emptyBucket = Bucket "base" "empty set of layers" (emptyLayer "base") (Empty, []
 cleanBucket :: ST ()
 cleanBucket = modify $ \s -> s { stBucket = emptyBucket }
 
-emptyLayer :: Name -> Layer Body
+emptyLayer :: Name -> Layer DF
 emptyLayer n = Layer (n,[(".",D)])
 
 hash :: Route -> String
@@ -141,11 +142,11 @@ cleanWorkSpace = liftIO . cleanDirectory =<< getWorkDirectory
                   cleanDirectory f
                   removeDirectory f
 
-loadChange :: CLayer -> ST (Changes Body)
+loadChange :: CLayer -> ST (Changes DF)
 loadChange (CLayer _ _ h) = do
     layersPath <- getLayersPath
     -- TODO: catch errors here
-    either (\(_ :: SomeException) -> (Changes [])) id <$> (liftIO $ try $ restore (layersPath </> h))
+    either (\(_ :: SomeException) -> (Changes [])) id <$> (liftIO $ try $ decodeFile (layersPath </> h))
 
 log :: Show a => a -> ST ()
 log x = tell $ show x <> "\n"
@@ -158,7 +159,7 @@ isWorkDirectoryClean = do
     n <- getLayerName
     wd <- getWorkDirectory
     old <- getAllLayersFromBucket
-    new <- liftIO $ load n wd :: ST (Layer Body)
+    new <- liftIO $ dump n wd :: ST (Layer DF)
     return $ getPatch old new == Changes []
 
 ifM :: Monad m => m Bool -> m () -> m () -> m ()

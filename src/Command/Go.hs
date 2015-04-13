@@ -50,7 +50,7 @@ goDown = do
              patchWorkSpace DDown changes
              modify $ \s -> s { stBucket = bucket { rTree = new }}
 
-patchWorkSpace :: Direction -> [Diff (FilePath, DF Body)] -> ST ()
+patchWorkSpace :: Direction -> [Diff (FilePath, DF)] -> ST ()
 patchWorkSpace d xs = do
     -- split to 2 line, remove first, restore second
     let (f, s) = (filter (fun d) xs, filter (not . (fun d)) xs)
@@ -61,7 +61,7 @@ patchWorkSpace d xs = do
     patchWorkSpace' (length s + 1) d s
     where
       -- | recurse allowed only i times, where i -> length xs + 1
-      patchWorkSpace' :: Int -> Direction -> [Diff (FilePath, DF Body)] -> ST ()
+      patchWorkSpace' :: Int -> Direction -> [Diff (FilePath, DF )] -> ST ()
       patchWorkSpace' _ _ [] = return ()
       patchWorkSpace' 0 _ _ = error "problem when workWithFile"
       patchWorkSpace' i y ys = do
@@ -70,14 +70,14 @@ patchWorkSpace d xs = do
           let new = map snd . filter (not . fst) $ zip result ys
           patchWorkSpace' (i - 1) y new
 
-      workWithFile :: Direction -> Diff (FilePath, DF Body) -> ST Bool
+      workWithFile :: Direction -> Diff (FilePath, DF ) -> ST Bool
       workWithFile DDown (First (p, f)) = restoreFile p f
       workWithFile DDown (Second (p, f)) = rmFile p f
       workWithFile DUp   (First (p, f)) = rmFile p f
       workWithFile DUp   (Second (p, f)) = restoreFile p f
       workWithFile _ _ = error "not implemented in workWithFile"
       
-      rmFile :: FilePath -> DF a -> ST Bool
+      rmFile :: FilePath -> DF -> ST Bool
       rmFile f D = do
           wd <- getWorkDirectory
           e <- liftIO $ try $ removeDirectory (normalise $ wd </> f)
@@ -87,14 +87,14 @@ patchWorkSpace d xs = do
           e <- liftIO $ try $ removeFile (normalise $ wd </> f)
           return $ either (const False) (const True) (e :: Either SomeException ())
       
-      restoreFile :: FilePath -> DF Body -> ST Bool
+      restoreFile :: FilePath -> DF  -> ST Bool
       restoreFile f D = do
           wd <- getWorkDirectory
           e <- liftIO $ try $ createDirectory (normalise $ wd </> f)
           return $ either (const False) (const True) (e :: Either SomeException ())
-      restoreFile f (F b) = do
+      restoreFile f b = do
           wd <- getWorkDirectory
-          e <- liftIO $ try $ save (normalise $ wd </> f) b
+          e <- liftIO $ try $ restore (normalise $ wd </> f) b 
           return $ either (const False) (const True) (e :: Either SomeException ())
 
 

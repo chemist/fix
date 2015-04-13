@@ -4,15 +4,11 @@ module Main where
 
 import System.Directory
 import System.FilePath
-import System.Environment
 import Control.Monad.State
 import Control.Monad.Writer hiding (First)
 import Data.Binary (decodeFile, encodeFile)
-import qualified Data.ByteString.Lazy as BL
 import Text.Printf
 import Control.Applicative
-import qualified Network.SSH.Client.LibSSH2 as SSH
-import qualified Network.SSH.Client.LibSSH2.Foreign as SSH
 
 import Prelude hiding (log)
 import Helpers
@@ -81,30 +77,3 @@ run (Command DiffAction _) =
 run (Command View _) = view
 
 run _ = liftIO $ printf "command not realizaded"
-
-runCommand :: String -> String -> Int -> String -> IO (Int, BL.ByteString)
-runCommand login host port command =
-      ssh login host port $ \s -> do
-        SSH.withChannel s $ \ch -> do
-           SSH.channelExecute ch command
-           SSH.readAllChannel ch
-           
-runCommands :: String -> String -> Int -> [String] -> IO [(Int, BL.ByteString)]
-runCommands login host port command =
-    ssh login host port $ \s -> forM command (work s)
-    where
-      work :: SSH.Session -> String -> IO (Int, BL.ByteString)
-      work session c = SSH.withChannel session $ \ch -> do
-          SSH.channelExecute ch c
-          SSH.readAllChannel ch
-
-ssh :: String -> String -> Int -> (SSH.Session -> IO a) -> IO a
-ssh login host port actions = do
-      SSH.initialize True
-      home <- getEnv "HOME"
-      let known_hosts = home </> ".ssh" </> "known_hosts"
-          public = home </> ".ssh" </> "id_rsa.pub"
-          private = home </> ".ssh" </> "id_rsa"
-      r <- SSH.withSSH2 known_hosts public private "" login host port $ actions
-      SSH.exit
-      return r

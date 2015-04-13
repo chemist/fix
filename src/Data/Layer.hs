@@ -10,11 +10,10 @@ import Data.Binary
 import System.Directory.Tree
 import GHC.Generics (Generic)
 import Data.ByteString (ByteString, readFile, writeFile)
-import Data.ByteString.Lazy (toStrict, fromStrict)
 import System.Posix.Types (FileMode, UserID, GroupID)
+import Data.Map (Map)
 import System.FilePath
 import Control.Applicative
-import System.Posix.Files
 import Crypto.Hash.MD5
 import Data.Monoid ((<>))
 import Control.Monad
@@ -29,7 +28,7 @@ import Data.Tree
 instance Contexted CLayer where
     index (CLayer _ n _) = n
 
-instance Contexted (Layer Body) where
+instance Contexted (Layer DF) where
     index (Layer (n, _)) = n
 
 type Comment = String
@@ -46,23 +45,11 @@ instance Binary CLayer
 data Bucket = Bucket
   { rName    :: Name
   , rComment :: String
-  , rBase    :: Layer Body
+  , rBase    :: Layer DF
   , rTree    :: Zipper Tree CLayer
   } deriving (Eq, Show, Generic)
 
-
 instance Binary Bucket
-
-data Body = Body
-  { bMD5   :: ByteString
-  , bBody  :: ByteString
-  , bMode  :: FileMode
-  , bOwner :: UserID
-  , bGroup :: GroupID
-  } deriving (Eq, Generic, Ord)
-
-instance Show Body where
-    show _ = ""
 
 instance Binary UserID where
     put = put . fromEnum
@@ -75,8 +62,6 @@ instance Binary GroupID where
 instance Binary FileMode where
     put = put . fromEnum
     get = toEnum <$> get
-
-instance Binary Body
 
 newtype DTree a = DTree (AnchoredDirTree a) deriving (Eq, Generic, Binary)
 
@@ -93,9 +78,19 @@ instance Show a => Show (DTree a) where
 
         shift first other = zipWith (++) (first : repeat other)
 
-data DF a = D | F a deriving (Show, Eq, Ord, Generic)
+newtype MD5 = MD5 ByteString deriving (Show, Eq, Ord, Generic)
 
-instance Binary a => Binary (DF a)
+instance Binary MD5
+
+data DF = D
+        | M (Map PathRegexp (UserID, GroupID, FileMode))
+        | F MD5 ByteString
+        | S MD5 ByteString 
+        deriving (Show, Eq, Ord, Generic)
+
+type PathRegexp = String
+
+instance Binary DF 
 
 deriving instance Generic (DirTree a)
 deriving instance Generic (AnchoredDirTree a)
@@ -107,70 +102,55 @@ instance Binary IOException where
 instance Binary a => Binary (DirTree a)
 instance Binary a => Binary (AnchoredDirTree a)
 
-class Loadable a where
-    load :: Name -> FilePath -> IO a
-    dump    :: FilePath -> a -> IO ()
+class Restorable a where
+    -- restore from a to raw files
+    restore :: FilePath -> a -> IO ()
+    -- make a from raw files
+    dump    :: Name -> FilePath -> IO a
 
-instance Saveable a => Loadable (DTree a) where
-    dump fp (DTree adt) = do
-        r <- writeDirectoryWith save (fp :/ dirTree adt)
+instance Restorable (Layer DF) where
+    restore fp l = restore fp (fromLayer l)
+    dump n fp = toLayer <$> dump n fp
+
+instance (Restorable a) => Restorable (DTree a) where
+    restore fp (DTree adt) = do
+        r <- writeDirectoryWith restore (fp :/ dirTree adt)
         when (anyFailed $ dirTree r) $ print $ "Error: " <> show (failures $ dirTree r)
-    load n fp = do
-        _ :/ t <- readDirectoryWith restore (addTrailingPathSeparator (normalise fp) <> ".")
+    dump n fp = do
+        _ :/ t <- readDirectoryWith (dump "") (addTrailingPathSeparator (normalise fp) <> ".")
         return $ DTree $ n :/ filterDir fun t
       where
       fun (Dir ".fix" _) = False
       fun Failed{} = False
       fun _ = True
 
-instance (Saveable a, Show a, Eq a) => Loadable (Layer a) where
-    dump fp l = dump fp (fromLayer l)
-    load n fp = toLayer <$> load n fp
-
-
-class Saveable a where
-    restore :: FilePath -> IO a
-    save :: FilePath -> a -> IO ()
-
-instance Saveable Bucket where
-    save = encodeFile
-    restore = decodeFile 
-
-instance Saveable Body where
-    restore f = do
-        bs <- readFile f
-        fs <- getFileStatus f
-        return $ Body (hash bs) bs (fileMode fs) (fileOwner fs) (fileGroup fs)
-    save f (Body _ bs _ _ _) = do
+instance Restorable DF where
+    restore f (F _ bs) = do
         writeFile f bs
+    restore _ _ = undefined
+    dump _ f = do
+        bs <- readFile f
+        return $ F (MD5 $ hash bs) bs 
 
-instance (Binary a, Saveable a) => Saveable (Layer a) where
-    restore fp = decode . fromStrict <$> readFile fp
-    save fp l = writeFile fp (toStrict . encode $ l)
-
-instance (Binary a, Saveable a) => Saveable (Changes a) where
-    save fp c = writeFile fp (toStrict . encode $ c)
-    restore fp = decode . fromStrict <$> readFile fp
-
-toLayer :: (Show a, Eq a) => DTree a -> Layer a
+toLayer :: DTree DF -> Layer DF
 toLayer (DTree (a :/ dt)) = Layer (a, map (\(p, f) -> (joinPath $ reverse p, f)) $ toList' ([], dt))
   where
-    toList' :: (Show a, Eq a) => ([FilePath], DirTree a) -> [([FilePath],DF a)]
+    toList' :: ([FilePath], DirTree DF) -> [([FilePath],DF)]
     toList' (p, Dir n []) = [(n:p, D)]
     toList' (p, Dir n xs) = (n:p, D) : concatMap (\x -> toList' (n:p, x)) xs 
-    toList' (p, File n f) = [(n:p, F f)]
+    toList' (p, File n f) = [(n:p, f)]
     toList' e = error (show e)
 
-fromLayer :: (Show a, Eq a) => Layer a -> DTree a
+fromLayer :: Layer DF -> DTree DF
 fromLayer (Layer (a, [])) = DTree $ a :/ Dir "." []
 fromLayer (Layer (a, sx)) = DTree $ a :/ (foldl1 insert . map singleton $ sx)
   where
-    singleton :: (Show a, Eq a) => (FilePath, DF a) -> DirTree a
+    singleton :: (FilePath, DF) -> DirTree DF
     singleton (fp, df) = singleton' (splitPath fp, df)
 
     singleton' ([], _) = error "bug here"
     singleton' ([n], D) = Dir (dropTrailingPathSeparator n) []
-    singleton' ([n], F x) = File (dropTrailingPathSeparator n) x
+    singleton' ([n], x) = File (dropTrailingPathSeparator n) x
     singleton' (n:xs, x) = Dir (dropTrailingPathSeparator n) [singleton' (xs, x)]
 
     insert :: (Show a, Eq a) => DirTree a -> DirTree a -> DirTree a
@@ -186,12 +166,12 @@ fromLayer (Layer (a, sx)) = DTree $ a :/ (foldl1 insert . map singleton $ sx)
       | name l == name n = insert l n : ls
       | otherwise = l : insert' ls n
 
-test :: (Show a, Eq a) => DTree a -> Bool
+test :: DTree DF -> Bool
 test x = x == (fromLayer . toLayer $ x)
 
-newtype Changes a = Changes [Diff (FilePath, DF a)] deriving (Show, Generic, Eq)
+newtype Changes a = Changes [Diff (FilePath, DF)] deriving (Show, Generic, Eq)
 
-newtype Layer a = Layer (FilePath, [(FilePath, DF a)]) deriving (Show, Generic, Eq)
+newtype Layer a = Layer (FilePath, [(FilePath, DF)]) deriving (Show, Generic, Eq)
 
 deriving instance Generic (Diff a)
 instance Binary a => Binary (Diff a)
@@ -213,7 +193,7 @@ instance Eq a => Ord (Diff (FilePath, a)) where
         getFp (Second (f, _)) = f
         getFp _ = error "can't use Both here"
 
-diffShow :: (Show a, Eq a, Ord a) => Changes a -> (DTree a, DTree a, DTree a)
+diffShow :: Changes DF -> (DTree DF, DTree DF, DTree DF)
 diffShow (Changes xs) = diffShow' (Set.empty, Set.empty, Set.empty) xs
     where
       diffShow' (l, r, lr) [] = ( fromLayer $ Layer ("(-)" , Set.toList $ Set.map fun l  )

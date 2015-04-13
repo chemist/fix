@@ -43,7 +43,7 @@ showDiff = do
     n <- getLayerName
     wd <- getWorkDirectory
     old <- getAllLayersFromBucket
-    new <- liftIO $ load n wd :: ST (Layer Body)
+    new <- liftIO $ dump n wd :: ST (Layer DF)
     let changes = getPatch old new
     let (r, a, ra) = diffShow changes
     msg "Diff result..."

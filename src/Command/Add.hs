@@ -1,6 +1,7 @@
 module Command.Add where
 
 import System.Directory
+import Data.Binary (encodeFile)
 import System.FilePath
 import Control.Monad.State
 import Control.Applicative
@@ -25,6 +26,6 @@ createLayer name = do
               cl = CLayer "" n hash'
           let newZip = attach cl oldZip
           modify $ \s -> s { stBucket = (stBucket s) { rTree = newZip }}
-          liftIO $ save (layersPath </> hash') (Changes [] :: Changes Body)          
+          liftIO $ encodeFile (layersPath </> hash') (Changes [] :: Changes DF)          
 
 

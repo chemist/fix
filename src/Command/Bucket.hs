@@ -4,6 +4,7 @@ import System.Directory
 import System.FilePath
 import Control.Monad.State
 import Control.Applicative
+import Data.Binary (encodeFile, decodeFile)
 
 import Prelude hiding (log)
 import Types
@@ -56,7 +57,7 @@ restoreBucket name = do
     available <- isBucketAvailable name
     if available
        then do
-           bucket <- liftIO $ restore $ fixDirectory </> name </> "bucket"
+           bucket <- liftIO $ decodeFile $ fixDirectory </> name </> "bucket"
            modify $ \s -> s { stBucket = bucket }
        else msg "bucket not found"
 
@@ -67,7 +68,7 @@ restoreWorkSpaceFromBucket = do
     log "layer: "
     log layer
     work <- getWorkDirectory
-    liftIO $ dump work layer
+    liftIO $ restore work layer
 
 saveBucket :: ST ()
 saveBucket = do
@@ -75,6 +76,6 @@ saveBucket = do
     bucketName <- getBucketName
     bucket <- getBucket
     fixDirectory <- getFixDirectory
-    liftIO $ save (fixDirectory </> bucketName </> "bucket") bucket
+    liftIO $ encodeFile (fixDirectory </> bucketName </> "bucket") bucket
 
 

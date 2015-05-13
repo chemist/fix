@@ -90,12 +90,17 @@ toTextMode (s:xs) = sticky $ concatMap toMode xs
         fun '7' m = fun '1' . fun '2' . fun '4' $ m
         fun _ _ = error "unknown sticky"
 
+toNumMode :: String -> String
 toNumMode "" = error "empty text mode"
 toNumMode xs =
     let (owner, xs') = splitAt 3 xs
         (group, other) = splitAt 3 xs'
-    in (map toMode owner, map toMode group, map toMode other)
+        allModes = [doble $ fun owner, fun group, fun other]
+        sticky = head $ show $ foldl (\b a -> b + fst a) 0 allModes
+        modes = concatMap (show . snd) allModes
+    in sticky : modes
     where
+      doble (x, y) = (2 * x, y)
       toMode '-' = (0, 0)
       toMode 'x' = (0, 1)
       toMode 'w' = (0, 2)
@@ -104,9 +109,11 @@ toNumMode xs =
       toMode 'T' = (1, 0)
       toMode 's' = (2, 1)
       toMode 'S' = (2, 0)
-
-
-
+      toMode _ = error "bad mode"
+      fun :: String -> (Int, Int)
+      fun ys = foldl (\y x -> pluss y (toMode x)) (0,0) ys
+      pluss :: (Int, Int) -> (Int, Int) -> (Int, Int)
+      pluss (a,b) (c,d) = (a + c, b + d)
 
 goodComment :: Text
 goodComment = "  # asdfasdfasdf asdfasdf afsd\n\n"

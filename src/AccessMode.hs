@@ -3,7 +3,8 @@ module AccessMode where
 
 import Data.Attoparsec.Text hiding (take)
 import Control.Applicative
-import Data.Map (Map)
+import Data.Map (Map, (!))
+import qualified Data.Map as M
 import Data.Text (Text)
 import Data.Monoid ((<>))
 import Prelude hiding (takeWhile)
@@ -56,26 +57,55 @@ symMode = count 9 allowed
     allowed = satisfy (inClass "rwxstST-")
 
 toTextMode :: String -> String
-toTextMode (s:xs) = concatMap (toT s) $ zip [0 .. 3] xs
-toTextMode _ = error "bad mode"
+toTextMode "" = error "empty num mode"
+toTextMode (s:xs) = sticky $ concatMap toMode xs
+  where
+    toMode :: Char -> String
+    toMode '0' = "---" 
+    toMode '1' = "--x" 
+    toMode '2' = "-w-" 
+    toMode '3' = "-wx" 
+    toMode '4' = "r--" 
+    toMode '5' = "r-x" 
+    toMode '6' = "rw-" 
+    toMode '7' = "rwx" 
+    toMode _ = error "unknown mode"
+    
+    sticky :: String -> String
+    sticky = snd . unzip . M.toList . fun s . M.fromList . zip [1..9 :: Int]
+      where
+        fun '0' m = m
+        fun '1' m = if m ! 9 == '-'
+                       then M.insert 9 'T' m
+                       else M.insert 9 't' m
+        fun '2' m = if m ! 6 == '-'
+                       then M.insert 6 'S' m
+                       else M.insert 6 's' m
+        fun '4' m = if m ! 3 == '-'
+                       then M.insert 3 'S' m
+                       else M.insert 3 's' m
+        fun '3' m = fun '1' . fun '2' $ m
+        fun '5' m = fun '1' . fun '4' $ m
+        fun '6' m = fun '2' . fun '4' $ m
+        fun '7' m = fun '1' . fun '2' . fun '4' $ m
+        fun _ _ = error "unknown sticky"
 
-toT :: Char -> (Int, Char) -> String
-toT s (i, '0') = "--" <> sticki s i "-"
-toT s (i, '1') = "--" <> sticki s i "x"
-toT s (i, '2') = "-w" <> sticki s i "-"
-toT s (i, '3') = "-w" <> sticki s i "x"
-toT s (i, '4') = "r-" <> sticki s i "-"
-toT s (i, '5') = "r-" <> sticki s i "x"
-toT s (i, '6') = "rw" <> sticki s i "-"
-toT s (i, '7') = "rw" <> sticki s i "x"
-toT _ _ = error "unknown mode"
+toNumMode "" = error "empty text mode"
+toNumMode xs =
+    let (owner, xs') = splitAt 3 xs
+        (group, other) = splitAt 3 xs'
+    in (map toMode owner, map toMode group, map toMode other)
+    where
+      toMode '-' = (0, 0)
+      toMode 'x' = (0, 1)
+      toMode 'w' = (0, 2)
+      toMode 'r' = (0, 4)
+      toMode 't' = (1, 1)
+      toMode 'T' = (1, 0)
+      toMode 's' = (2, 1)
+      toMode 'S' = (2, 0)
 
-sticki '0' _ x = x
-sticki '1' 3 "-" = "T"
-sticki '1' 3 _ = "t"
-sticki '2' 2 "-" = "S"
-sticki '2' 2 _ = "s"
-sticki '3' 2 _ = "s"
+
 
 
 goodComment :: Text

@@ -1,4 +1,4 @@
-module Command 
+module Command
 ( view
 , showDiff
 , viewOrCreateOrSwitchBucket
@@ -11,10 +11,10 @@ module Command
 )
 where
 
-import Command.Go
-import Command.Show
-import Command.Save
-import Command.Add
-import Command.Bucket
+import           Command.Add
+import           Command.Bucket
+import           Command.Go
+import           Command.Save
+import           Command.Show
 
 

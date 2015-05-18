@@ -1,11 +1,11 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Opts.Opts where
 
-import Options.Applicative 
-import Data.Map hiding (null)
-import Data.Binary
-import GHC.Generics (Generic)
-import Data.Tree
+import           Data.Binary
+import           Data.Map            hiding (null)
+import           Data.Tree
+import           GHC.Generics        (Generic)
+import           Options.Applicative
 
 {--
 fix
@@ -23,7 +23,7 @@ fix remove
   убрать файлы верхнего слоя из рабочей директории
 fix up
   переключиться на слой выше если есть
-fix down 
+fix down
   переключиться на слой ниже если есть
 fix diff
 fix save
@@ -35,15 +35,15 @@ fix destroy $name
 --}
 
 parseOptions :: IO Options
-parseOptions = 
+parseOptions =
   customExecParser (prefs showHelpOnError)
     (info (helper <*> (Options <$> parseCommand <*> verbosity <*> fixPath)) description)
   where
-    description = 
+    description =
       (  fullDesc
       <> header "fix tool, util for manage your infrastructure."
       <> progDesc "Do it simple."
-      ) 
+      )
 
 parseCommand :: Parser Command
 parseCommand = subparser
@@ -63,19 +63,19 @@ parseCommand = subparser
       ( progDesc "show current bucket" ))
   <> command "go" (info ( helper <*> (Command <$> (Go <$> parseDirection) <*> pure ""))
       ( progDesc "switch to layer"))
-  )  
+  )
   where
     sm = strArgument . metavar
 
 
 
-parseRoute :: Parser Command 
+parseRoute :: Parser Command
 parseRoute = (Command <$> (Go <$> (ByRoute <$> (routeFromString <$> sm "ROUTE"))) <*> pure "")
   where
     sm = strArgument . metavar
 
 parseContext :: Parser Context
-parseContext = subparser ( command "bucket" (info (pure BucketContext) (progDesc "bucket"))) 
+parseContext = subparser ( command "bucket" (info (pure BucketContext) (progDesc "bucket")))
 
 parseDirection :: Parser Direction
 parseDirection = subparser
@@ -86,13 +86,13 @@ parseDirection = subparser
   )
   <|> (ByRoute <$> (routeFromString <$> sm))
   where
-    sm = strArgument 
+    sm = strArgument
       ( metavar "ROUTE"
       <> help "way in tree like: one.two.tree"
       )
 
 routeFromString :: String -> Route
-routeFromString t 
+routeFromString t
   | null s'   = [l]
   | otherwise = l : routeFromString (tail s')
   where (l, s') = span (/= '.') t
@@ -103,9 +103,9 @@ instance Binary Verbosity
 
 fixPath :: Parser String
 fixPath = strOption
-  ( long "fix-path" 
-  <> short 'f' 
-  <> metavar "PATH" 
+  ( long "fix-path"
+  <> short 'f'
+  <> metavar "PATH"
   <> help "Path to workspace"
   ) <|> pure ""
 
@@ -116,9 +116,9 @@ verbosity = flag Normal Verbose
   <> help "Enable verbose mode" )
 
 data Options = Options
-  { optCommand :: Command
+  { optCommand   :: Command
   , optVerbosity :: Verbosity
-  , optFixPath :: Path
+  , optFixPath   :: Path
   } deriving (Show, Eq, Generic)
 
 instance Binary Options
@@ -139,13 +139,13 @@ data Action = Add Context
             | Go Direction
             | BucketOpt
             | DiffAction
-            | View 
-            | Init 
-            | Save 
+            | View
+            | Init
+            | Save
             | Help
             deriving (Show, Eq, Generic)
 
-instance Binary Action 
+instance Binary Action
 
 type Path = String
 type Hostname = String

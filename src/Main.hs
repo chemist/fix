@@ -1,21 +1,21 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
-import System.Directory
-import System.FilePath
-import Control.Monad.State
-import Control.Monad.Writer hiding (First)
-import Data.Binary (decodeFile, encodeFile)
-import Text.Printf
-import Control.Applicative
+import           Control.Applicative
+import           Control.Monad.State
+import           Control.Monad.Writer hiding (First)
+import           Data.Binary          (decodeFile, encodeFile)
+import           System.Directory
+import           System.FilePath
+import           Text.Printf
 
-import Prelude hiding (log)
-import Helpers
-import Command
-import Types hiding (goUp)
+import           Command
+import           Helpers
+import           Prelude              hiding (log)
+import           Types                hiding (goUp)
 
-import Opts.Opts
+import           Opts.Opts
 
 readState :: FilePath -> IO Fix
 readState fixDirectory = do
@@ -38,7 +38,7 @@ writeState fixDirectory (str, st) = do
 
 main :: IO ()
 main = do
-    command <-  parseOptions 
+    command <-  parseOptions
     let fixDirectory = optFixPath command </> fixDirectoryName
     fixDirectoryAvailable <-  doesDirectoryExist $ fixDirectory
     unless fixDirectoryAvailable $ runInit (optFixPath command) (optCommand command)
@@ -58,9 +58,9 @@ runInit fixPath' (Command Init _) = do
     createDirectoryIfMissing False $ fixPath' </> fixDirectoryName </> "base" </> "layers"
 runInit _ _ = error "Cant found fix directory, try fix init, or fix -f path to fix directory"
 
-    
+
 run :: Command -> ST ()
-run (Command (Add LayerContext) name) = 
+run (Command (Add LayerContext) name) =
     ifM isEmpty
       (createLayer name >> (getRoute >>= \r -> goRoute (r <> [name])))
       (createLayer name)

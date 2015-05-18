@@ -1,29 +1,29 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Data.Layer where
 
-import Data.Binary 
-import System.Directory.Tree
-import GHC.Generics (Generic)
-import Data.ByteString (ByteString, readFile, writeFile)
-import System.Posix.Types (FileMode, UserID, GroupID)
-import Data.Map (Map)
-import System.FilePath
-import Control.Applicative
-import Crypto.Hash.MD5
-import Data.Monoid ((<>))
-import Control.Monad
-import Data.Algorithm.Diff 
-import Data.List (delete, sortBy)
-import qualified Data.Set as Set
-import GHC.IO.Exception
-import Prelude hiding (readFile, writeFile)
+import           Control.Applicative
+import           Control.Monad
+import           Crypto.Hash.MD5
+import           Data.Algorithm.Diff
+import           Data.Binary
+import           Data.ByteString       (ByteString, readFile, writeFile)
+import           Data.List             (delete, sortBy)
+import           Data.Map              (Map)
+import           Data.Monoid           ((<>))
+import qualified Data.Set              as Set
+import           GHC.Generics          (Generic)
+import           GHC.IO.Exception
+import           Prelude               hiding (readFile, writeFile)
+import           System.Directory.Tree
+import           System.FilePath
+import           System.Posix.Types    (FileMode, GroupID, UserID)
 
-import Data.Tree
+import           Data.Tree
 
 instance Contexted CLayer where
     index (CLayer _ n _) = n
@@ -56,7 +56,7 @@ instance Binary UserID where
     get = toEnum <$> get
 
 instance Binary GroupID where
-    put = put . fromEnum 
+    put = put . fromEnum
     get = toEnum <$> get
 
 instance Binary FileMode where
@@ -85,12 +85,12 @@ instance Binary MD5
 data DF = D
         | M (Map PathRegexp (UserID, GroupID, FileMode))
         | F MD5 ByteString
-        | S MD5 ByteString 
+        | S MD5 ByteString
         deriving (Show, Eq, Ord, Generic)
 
 type PathRegexp = String
 
-instance Binary DF 
+instance Binary DF
 
 deriving instance Generic (DirTree a)
 deriving instance Generic (AnchoredDirTree a)
@@ -130,14 +130,14 @@ instance Restorable DF where
     restore _ _ = undefined
     dump _ f = do
         bs <- readFile f
-        return $ F (MD5 $ hash bs) bs 
+        return $ F (MD5 $ hash bs) bs
 
 toLayer :: DTree DF -> Layer DF
 toLayer (DTree (a :/ dt)) = Layer (a, map (\(p, f) -> (joinPath $ reverse p, f)) $ toList' ([], dt))
   where
     toList' :: ([FilePath], DirTree DF) -> [([FilePath],DF)]
     toList' (p, Dir n []) = [(n:p, D)]
-    toList' (p, Dir n xs) = (n:p, D) : concatMap (\x -> toList' (n:p, x)) xs 
+    toList' (p, Dir n xs) = (n:p, D) : concatMap (\x -> toList' (n:p, x)) xs
     toList' (p, File n f) = [(n:p, f)]
     toList' e = error (show e)
 
@@ -162,7 +162,7 @@ fromLayer (Layer (a, sx)) = DTree $ a :/ (foldl1 insert . map singleton $ sx)
 
     insert' :: (Show a, Eq a) => [DirTree a] -> DirTree a -> [DirTree a]
     insert' [] n = [n]
-    insert' (l:ls) n 
+    insert' (l:ls) n
       | name l == name n = insert l n : ls
       | otherwise = l : insert' ls n
 

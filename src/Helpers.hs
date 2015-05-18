@@ -1,23 +1,24 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Helpers where
 
-import System.Directory
-import Data.Binary (decodeFile)
-import System.FilePath
+import           Data.Binary                (decodeFile)
+import           System.Directory
+import           System.FilePath
 -- import System.Posix.Files
-import Control.Monad.State
-import Control.Monad.Writer hiding (First)
-import Control.Exception.Base (try, SomeException, throw)
-import qualified Crypto.Hash.MD5 as H
-import qualified Data.ByteString.Char8 as H 
-import qualified Data.ByteString.Lazy.Char8 as BL 
-import qualified Data.ByteString as B 
-import Control.Applicative
-import Data.ByteString.Builder (word8Hex, Builder, toLazyByteString)
-import Data.Word (Word8)
+import           Control.Applicative
+import           Control.Exception.Base     (SomeException, throw, try)
+import           Control.Monad.State
+import           Control.Monad.Writer       hiding (First)
+import qualified Crypto.Hash.MD5            as H
+import qualified Data.ByteString            as B
+import           Data.ByteString.Builder    (Builder, toLazyByteString,
+                                             word8Hex)
+import qualified Data.ByteString.Char8      as H
+import qualified Data.ByteString.Lazy.Char8 as BL
+import           Data.Word                  (Word8)
 
-import Types
-import Opts.Opts
+import           Opts.Opts
+import           Types
 
 path :: FilePath
 path = "/Users/chemist/Develop/fix/tmp/"
@@ -41,7 +42,7 @@ getBucketName :: ST Name
 getBucketName = rName <$> getBucket
 
 getLayerName :: ST Name
-getLayerName = index . rBase <$> getBucket 
+getLayerName = index . rBase <$> getBucket
 
 getLayerHash :: ST (Maybe String)
 getLayerHash = do
@@ -81,8 +82,8 @@ getParrentsLayersFromBucket = getLayers False
 getLayers :: Bool -> ST (Layer DF)
 getLayers f = do
     base <- rBase <$> getBucket
-    tr <- rTree <$> getBucket 
-    let cvalues = 
+    tr <- rTree <$> getBucket
+    let cvalues =
           if f
              then values tr
              else maybe [] (values) (goUp tr)
@@ -90,7 +91,7 @@ getLayers f = do
     return $ foldl (patch Apply) base changes
     where
       loadChanges :: [CLayer] -> ST [Changes DF]
-      loadChanges = mapM loadChange 
+      loadChanges = mapM loadChange
 
 emptyBucket :: Bucket
 emptyBucket = Bucket "base" "empty set of layers" (emptyLayer "base") (Empty, [])
@@ -111,13 +112,13 @@ getLayersPath :: ST Path
 getLayersPath = do
     fixDirectory <- getFixDirectory
     bucketName <- getBucketName
-    return $ fixDirectory </> bucketName </> "layers" 
+    return $ fixDirectory </> bucketName </> "layers"
 
 getWorkDirectory :: ST Path
 getWorkDirectory = dropFileName . dropTrailingPathSeparator . stFixDirectory <$> get
 
 updateState :: Options -> ST ()
-updateState opts = modify $ 
+updateState opts = modify $
     \s -> s { stVerbosity = optVerbosity opts }
 
 cleanWorkSpace :: ST ()
@@ -126,7 +127,7 @@ cleanWorkSpace = liftIO . cleanDirectory =<< getWorkDirectory
       cleanDirectory :: Path -> IO ()
       cleanDirectory filePath = do
           cont <- getDirectoryContents filePath
-          forM_ (dotFilter cont) $ \x -> rm (filePath </> x) 
+          forM_ (dotFilter cont) $ \x -> rm (filePath </> x)
 
       dotFilter :: [Path] -> [Path]
       dotFilter = filter (`notElem` [".", "..", ".fix"])
@@ -152,7 +153,7 @@ log :: Show a => a -> ST ()
 log x = tell $ show x <> "\n"
 
 msg :: Show a => a -> ST ()
-msg = liftIO . print 
+msg = liftIO . print
 
 isWorkDirectoryClean :: ST Bool
 isWorkDirectoryClean = do

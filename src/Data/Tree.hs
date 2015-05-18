@@ -1,21 +1,21 @@
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveFunctor        #-}
+{-# LANGUAGE DeriveGeneric        #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
 module Data.Tree where
 
-import Data.Maybe (fromJust)
-import Data.Monoid 
-import Data.Binary
-import GHC.Generics
- 
+import           Data.Binary
+import           Data.Maybe   (fromJust)
+import           Data.Monoid
+import           GHC.Generics
+
 type Name = String
 type Route = [Name]
 
 class Contexted a where
     index :: a -> Name
- 
+
 data Move b a = Next (b a)
               | Level (b a)
               deriving (Eq, Generic)
@@ -55,8 +55,8 @@ instance Contexted a => Monoid (Tree a) where
     mappend a Empty = a
     mappend Empty a = a
     mappend (Node v next link) x@(Node v1 next1 link1)
-       | index v == index v1 = Node v (next <> next1) (link <> link1) 
-       | otherwise = Node v (next <> x) link 
+       | index v == index v1 = Node v (next <> next1) (link <> link1)
+       | otherwise = Node v (next <> x) link
 
 
 instance (Contexted a, Show a) => Show (Tree a) where
@@ -66,7 +66,7 @@ instance (Contexted a, Show a) => Show (Tree a) where
         drawLevel (Node v next link) = (show (index v) <> " " <> show v <> " ") : (drawSubtree next link)
 
         drawSubtree next link = (shift "`- " " | " (drawLevel link)) <> drawLevel next
-    
+
         shift first rest = zipWith (++) (first : repeat rest)
 
 testTree :: Tree (String, Maybe String)
@@ -97,7 +97,7 @@ instance Zippers Tree where
 
     attach t (Empty, bs) = (Node t Empty Empty, bs)
     attach t (Node v next Empty, bs) = (Node v next (Node t Empty Empty), bs)
-    attach t tr = 
+    attach t tr =
       case isExist of
            Nothing ->
                let (Node v1 Empty link, bs) = goLastNext tr
@@ -130,11 +130,11 @@ instance Zippers Tree where
     value (Empty, _) = Nothing
     value (Node x _ _, _) = Just x
 
-    top (t,[]) = (t,[])  
+    top (t,[]) = (t,[])
     top z = top (fromJust $ goBack z)
 
     route (z, m) = foldl fun [gi z] m
-      where 
+      where
         fun xs (Next{}) = xs
         fun xs (Level x) = gi x : xs
         gi :: Contexted a => Tree a -> Name
@@ -158,10 +158,10 @@ instance Zippers Tree where
       walk [] t = Just t
       walk (x : []) t
         | x == giz t = Just t
-        | otherwise = goNext t >>= walk (x : []) 
-      walk (x : xs) t 
-        | x == giz t = goLevel t >>= walk xs 
-        | otherwise = goNext  t >>= walk (x : xs) 
+        | otherwise = goNext t >>= walk (x : [])
+      walk (x : xs) t
+        | x == giz t = goLevel t >>= walk xs
+        | otherwise = goNext  t >>= walk (x : xs)
 
     cursor ((Node v _ _), _) = Just (index v)
     cursor (Empty       , _) = Nothing
@@ -187,5 +187,5 @@ goClosest ys z = walk ys (top z)
   walk (x : xs) z'
     | x == giz z' = maybe z' (walk xs) (goLevel z')
     | otherwise = maybe z' (walk (x : xs)) (goNext z')
-                      
+
 

@@ -1,12 +1,12 @@
 module Ssh where
 
-import Network.SSH.Client.LibSSH2 
-import Network.SSH.Client.LibSSH2.Foreign 
-import Data.ByteString.Lazy hiding (pack)
-import Data.ByteString.Char8 (pack)
-import Control.Monad
-import System.Environment
-import System.FilePath
+import           Control.Monad
+import           Data.ByteString.Char8              (pack)
+import           Data.ByteString.Lazy               hiding (pack)
+import           Network.SSH.Client.LibSSH2
+import           Network.SSH.Client.LibSSH2.Foreign
+import           System.Environment
+import           System.FilePath
 
 
 runCommand :: String -> String -> Int -> String -> IO (Int, ByteString)
@@ -15,7 +15,7 @@ runCommand login host port command =
         withChannel s $ \ch -> do
            channelExecute ch command
            readAllChannel ch
-           
+
 runCommands :: String -> String -> Int -> [String] -> IO [(Int, ByteString)]
 runCommands login host port command =
     ssh login host port $ \s -> forM command (work s)

@@ -1,4 +1,4 @@
-module Types 
+module Types
 ( Fix(..)
 , ST
 , Bucket(..)
@@ -9,7 +9,7 @@ module Types
 , CLayer(..)
 , Tree(..)
 , Layer(..)
-, PatchType(..) 
+, PatchType(..)
 , goClosest
 , patch
 , getPatch
@@ -24,7 +24,7 @@ module Types
 )
 where
 
-import Data.Layer 
-import Data.Tree
-import Data.Types
+import           Data.Layer
+import           Data.Tree
+import           Data.Types
 

@@ -20,11 +20,11 @@ data Group = NGroup Text
 
 newtype AccessMode = AccessMode (Map PathRegexp (Owner, Group, CMode))
 
-main :: IO ()
-main = putStrLn "hello"
-
 comment :: Parser ()
 comment = skipSpace *> char '#' *> skipWhile isEndOfLine *> pure ()
+
+delimeter :: Parser ()
+delimeter = char ':' *> pure ()
 
 mode :: Parser (PathRegexp, (Owner, Group, CMode))
 mode = undefined

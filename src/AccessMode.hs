@@ -10,6 +10,9 @@ import           Prelude              hiding (takeWhile)
 import           System.Posix.Types
 import           Text.Printf
 
+example :: FilePath
+example = "_fix_access_mode_"
+
 type PathRegexp = String
 
 data Owner = NOwner Text
@@ -18,16 +21,48 @@ data Owner = NOwner Text
 data Group = NGroup Text
            | IGroup Integer
 
-newtype AccessMode = AccessMode (Map PathRegexp (Owner, Group, CMode))
+type Mode = (Owner, Group, CMode, CMode)
+
+data AccessMode = AccessMode 
+  { umaskFile :: CMode
+  , umaskDir  :: CMode
+  , modes :: Map PathRegexp Mode
+  }
 
 comment :: Parser ()
 comment = skipSpace *> char '#' *> skipWhile isEndOfLine *> pure ()
 
-delimeter :: Parser ()
-delimeter = char ':' *> pure ()
+umask :: Parser (CMode, CMode)
+umask = (,) <$> (skipSpace *> "umask" *> delimeter *> numMode) 
+            <*> (delimeter *> numMode <* skipWhile isEndOfLine)
 
-mode :: Parser (PathRegexp, (Owner, Group, CMode))
-mode = undefined
+goodUmask :: Text
+goodUmask = "umask:177:177"
+
+
+delimeter :: Parser ()
+delimeter = skipSpace *> char ':' *> skipSpace *> pure ()
+
+accessMode :: Parser AccessMode
+accessMode = undefined
+
+mode :: Parser (PathRegexp, Mode)
+mode = do
+    skipSpace
+    path <- takeWhile (\x -> not (inClass ":" x))
+    delimeter
+    ui <- userid
+    delimeter
+    gi <- groupid
+    delimeter
+    mm <- try sfileMode 
+    delimeter
+    mg <- try sfileMode
+    undefined
+
+
+
+
 
 userid :: Parser Owner
 userid = undefined

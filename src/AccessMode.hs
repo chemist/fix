@@ -4,77 +4,96 @@ module AccessMode where
 import           Control.Applicative
 import           Data.Attoparsec.Text hiding (take)
 import           Data.Bits
-import           Data.Map             (Map)
+import           Data.Map             (Map, fromList)
 import           Data.Text            (Text)
-import           Prelude              hiding (takeWhile)
+import           Prelude              hiding (readFile, takeWhile)
 import           System.Posix.Types
 import           Text.Printf
+import Control.Monad (void)
 
 example :: FilePath
 example = "_fix_access_mode_"
 
-type PathRegexp = String
+type PathRegexp = Text
 
 data Owner = NOwner Text
            | IOwner Integer
+           deriving (Show, Eq)
 
 data Group = NGroup Text
            | IGroup Integer
+           deriving (Show, Eq)
 
-type Mode = (Owner, Group, CMode, CMode)
+type Mode = (Owner, Group, Maybe CMode, Maybe CMode)
 
-data AccessMode = AccessMode 
+data AccessMode = AccessMode
   { umaskFile :: CMode
   , umaskDir  :: CMode
-  , modes :: Map PathRegexp Mode
-  }
+  , modes     :: Map PathRegexp Mode
+  } deriving (Show, Eq)
 
 comment :: Parser ()
-comment = skipSpace *> char '#' *> skipWhile isEndOfLine *> pure ()
+comment = (emptySpace *> char '#' *> skipWhile (\x -> not $ isEndOfLine x)) *> pure ()
 
 umask :: Parser (CMode, CMode)
-umask = (,) <$> (skipSpace *> "umask" *> delimeter *> numMode) 
+umask = (,) <$> (skipSpace *> "umask" *> delimeter *> numMode)
             <*> (delimeter *> numMode <* skipWhile isEndOfLine)
 
 goodUmask :: Text
 goodUmask = "umask:177:177"
 
+goodMode :: Text
+goodMode = "/etc/*:chemist:users::755\n"
+
+otherMode :: Text
+otherMode = "/etc/*:chemist:users:644:\n"
+
+emptySpace :: Parser ()
+emptySpace = skipWhile (inClass " \n\t\r")
 
 delimeter :: Parser ()
 delimeter = skipSpace *> char ':' *> skipSpace *> pure ()
 
 accessMode :: Parser AccessMode
-accessMode = undefined
+accessMode = do
+    comments
+    (x,y) <- umask 
+    modes' <-  many mode 
+    comments
+    return $ AccessMode x y $ fromList modes'
+
+comments :: Parser ()
+comments = try (void $ (comment `sepBy` endOfLine) <* endOfLine <|> pure [()])
 
 mode :: Parser (PathRegexp, Mode)
 mode = do
-    skipSpace
+    comments
     path <- takeWhile (\x -> not (inClass ":" x))
     delimeter
     ui <- userid
     delimeter
     gi <- groupid
     delimeter
-    mm <- try sfileMode 
+    mm <- (Just <$> sfileMode) <|> pure Nothing
     delimeter
-    mg <- try sfileMode
-    undefined
+    mg <- (Just <$> try sfileMode) <|> pure Nothing
+    return (path, (ui, gi, mm, mg))
 
 
 
 
 
 userid :: Parser Owner
-userid = undefined
+userid = NOwner <$> takeWhile (\x -> not (inClass ":" x))
 
 groupid :: Parser Group
-groupid = undefined
+groupid = NGroup <$> takeWhile (\x -> not (inClass ":" x))
 
 sfileMode :: Parser CMode
 sfileMode = numMode <|> symMode
 
 numMode :: Parser CMode
-numMode = numModeToCMode . digs <$> decimal 
+numMode = numModeToCMode . digs <$> decimal
     where
     digs :: Integral x => x -> [x]
     digs 0 = [0]
@@ -117,11 +136,11 @@ numModeToCMode xs =
 
 cmodeToTextMode :: CMode -> String
 cmodeToTextMode (CMode y) =
-   let asBool = zip [0 .. (11 :: Int)] $ reverse $ printf "%b" y 
-       sticky = (Just '1') == lookup 9 asBool 
+   let asBool = zip [0 .. (11 :: Int)] $ reverse $ printf "%b" y
+       sticky = (Just '1') == lookup 9 asBool
        geb    = (Just '1') == lookup 10 asBool
        ueb    = (Just '1') == lookup 11 asBool
-       fun x (i, b) 
+       fun x (i, b)
          | sticky && i == 0 && b == '1' = 't' : x
          | sticky && i == 0 && b == '0' = 'T' : x
          | geb && i == 3 && b == '1' = 's' : x

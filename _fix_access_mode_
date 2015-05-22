@@ -1,15 +1,17 @@
 
-# default umask
+
+#default umask
 # umask:umask for files:umask for directory
 umask:133:022
 
 # for all directory in /etc
+
 # filepath with regexp:owner:group:access mode for files:access mode for directories
 /etc/*:chemist:users::755
+
 # for all files in /etc
-/etc/*:chemist:users:644:
+/etc/apache/*:chemist:users:644:
 
-# for all files in subpath 
+# for all files in /etc
 /etc/nginx/*:root:root:644:755
-
 

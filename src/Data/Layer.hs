@@ -13,7 +13,6 @@ import           Data.Algorithm.Diff
 import           Data.Binary
 import           Data.ByteString       (ByteString, readFile, writeFile)
 import           Data.List             (delete, sortBy)
-import           Data.Map              (Map)
 import           Data.Monoid           ((<>))
 import qualified Data.Set              as Set
 import           GHC.Generics          (Generic)
@@ -21,9 +20,10 @@ import           GHC.IO.Exception
 import           Prelude               hiding (readFile, writeFile)
 import           System.Directory.Tree
 import           System.FilePath
-import           System.Posix.Types    (FileMode, GroupID, UserID)
+import           Data.Attoparsec.ByteString.Char8 (parseOnly)
 
 import           Data.Tree
+import           AccessMode
 
 instance Contexted CLayer where
     index (CLayer _ n _) = n
@@ -51,18 +51,6 @@ data Bucket = Bucket
 
 instance Binary Bucket
 
-instance Binary UserID where
-    put = put . fromEnum
-    get = toEnum <$> get
-
-instance Binary GroupID where
-    put = put . fromEnum
-    get = toEnum <$> get
-
-instance Binary FileMode where
-    put = put . fromEnum
-    get = toEnum <$> get
-
 newtype DTree a = DTree (AnchoredDirTree a) deriving (Eq, Generic, Binary)
 
 instance Show a => Show (DTree a) where
@@ -83,7 +71,7 @@ newtype MD5 = MD5 ByteString deriving (Show, Eq, Ord, Generic)
 instance Binary MD5
 
 data DF = D
-        | M (Map PathRegexp (UserID, GroupID, FileMode))
+        | M MD5 AccessMode 
         | F MD5 ByteString
         | S MD5 ByteString
         deriving (Show, Eq, Ord, Generic)
@@ -127,10 +115,17 @@ instance (Restorable a) => Restorable (DTree a) where
 instance Restorable DF where
     restore f (F _ bs) = do
         writeFile f bs
+    restore f (M _ bs) = do
+        writeFile f (rawFile bs)
     restore _ _ = undefined
     dump _ f = do
         bs <- readFile f
-        return $ F (MD5 $ hash bs) bs
+        if (snd $ splitFileName f) == example
+           then return $ M (MD5 $ hash bs) (right (parseOnly (accessMode bs) bs))
+           else return $ F (MD5 $ hash bs) bs
+        where
+          right (Right x) = x
+          right _ = error "right: bad parse result"
 
 toLayer :: DTree DF -> Layer DF
 toLayer (DTree (a :/ dt)) = Layer (a, map (\(p, f) -> (joinPath $ reverse p, f)) $ toList' ([], dt))

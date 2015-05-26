@@ -1,28 +1,37 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module AccessMode where
 
 import           Control.Applicative
-import           Data.Attoparsec.Text hiding (take)
+import           Data.Attoparsec.ByteString.Char8 hiding (take, isEndOfLine)
+import           Data.Attoparsec.Text (isEndOfLine)
 import           Data.Bits
 import           Data.Map             (Map, fromList)
 import           Data.Text            (Text)
 import           Prelude              hiding (readFile, takeWhile)
 import           System.Posix.Types
 import           Text.Printf
-import Control.Monad (void)
+import           Control.Monad (void)
+import           Data.Binary
+import           Data.ByteString (ByteString)
+import           GHC.Generics
 
 example :: FilePath
 example = "_fix_access_mode_"
 
-type PathRegexp = Text
+type PathRegexp = ByteString
 
-data Owner = NOwner Text
+data Owner = NOwner ByteString
            | IOwner Integer
-           deriving (Show, Eq)
+           deriving (Show, Eq, Ord, Generic)
 
-data Group = NGroup Text
+data Group = NGroup ByteString
            | IGroup Integer
-           deriving (Show, Eq)
+           deriving (Show, Eq, Ord, Generic)
+
+instance Binary Group
+instance Binary Owner
 
 type Mode = (Owner, Group, Maybe CMode, Maybe CMode)
 
@@ -30,10 +39,17 @@ data AccessMode = AccessMode
   { umaskFile :: CMode
   , umaskDir  :: CMode
   , modes     :: Map PathRegexp Mode
-  } deriving (Show, Eq)
+  , rawFile   :: ByteString
+  } deriving (Show, Eq, Ord, Generic)
+
+instance Binary CMode where
+    put = put . fromEnum 
+    get = toEnum <$> get
+
+instance Binary AccessMode
 
 comment :: Parser ()
-comment = (emptySpace *> char '#' *> skipWhile (\x -> not $ isEndOfLine x)) *> pure ()
+comment = (emptySpace *> char '#' *> skipWhile (not . isEndOfLine)) *> pure ()
 
 umask :: Parser (CMode, CMode)
 umask = (,) <$> (skipSpace *> "umask" *> delimeter *> numMode)
@@ -54,13 +70,13 @@ emptySpace = skipWhile (inClass " \n\t\r")
 delimeter :: Parser ()
 delimeter = skipSpace *> char ':' *> skipSpace *> pure ()
 
-accessMode :: Parser AccessMode
-accessMode = do
+accessMode :: ByteString -> Parser AccessMode
+accessMode r = do
     comments
     (x,y) <- umask 
     modes' <-  many mode 
     comments
-    return $ AccessMode x y $ fromList modes'
+    return $ AccessMode x y (fromList modes') r 
 
 comments :: Parser ()
 comments = try (void $ (comment `sepBy` endOfLine) <* endOfLine <|> pure [()])

@@ -7,15 +7,16 @@ import           Control.Applicative
 import           Data.Attoparsec.ByteString.Char8 hiding (take, isEndOfLine)
 import           Data.Attoparsec.Text (isEndOfLine)
 import           Data.Bits
-import           Data.Map             (Map, fromList)
 import           Data.Text            (Text)
 import           Prelude              hiding (readFile, takeWhile)
 import           System.Posix.Types
 import           Text.Printf
 import           Control.Monad (void)
 import           Data.Binary
-import           Data.ByteString (ByteString)
+import           Data.ByteString (ByteString, cons)
 import           GHC.Generics
+import Data.Maybe
+import Text.Regex.Posix.ByteString
 
 example :: FilePath
 example = "_fix_access_mode_"
@@ -36,11 +37,18 @@ instance Binary Owner
 type Mode = (Owner, Group, Maybe CMode, Maybe CMode)
 
 data AccessMode = AccessMode
-  { umaskFile :: CMode
-  , umaskDir  :: CMode
-  , modes     :: Map PathRegexp Mode
+  { umask     :: CMode
+  , modes     :: [(PathRegexp, Mode)]
   , rawFile   :: ByteString
-  } deriving (Show, Eq, Ord, Generic)
+  } deriving (Eq, Ord, Generic)
+
+instance Show AccessMode where
+    show a = "Access mode: umask = " ++ cmodeToNumMode (umask a) ++ " modes = " ++ showModes 
+      where
+      showModes = 
+        let m = modes a
+            defMode = fromMaybe (umask a)
+        in show $ map (\(p,(o, g, mfm, mgm)) -> show p ++ ":" ++ show o ++ ":" ++ show g ++ ":" ++ cmodeToNumMode (defMode mfm) ++ ":" ++ cmodeToNumMode (defMode mgm)) m
 
 instance Binary CMode where
     put = put . fromEnum 
@@ -51,12 +59,11 @@ instance Binary AccessMode
 comment :: Parser ()
 comment = (emptySpace *> char '#' *> skipWhile (not . isEndOfLine)) *> pure ()
 
-umask :: Parser (CMode, CMode)
-umask = (,) <$> (skipSpace *> "umask" *> delimeter *> numMode)
-            <*> (delimeter *> numMode <* skipWhile isEndOfLine)
+umaskP :: Parser CMode
+umaskP = skipSpace *> "umask" *> delimeter *> numMode <* skipWhile isEndOfLine
 
 goodUmask :: Text
-goodUmask = "umask:177:177"
+goodUmask = "umask:177"
 
 goodMode :: Text
 goodMode = "/etc/*:chemist:users::755\n"
@@ -72,18 +79,23 @@ delimeter = skipSpace *> char ':' *> skipSpace *> pure ()
 
 accessMode :: ByteString -> Parser AccessMode
 accessMode r = do
-    comments
-    (x,y) <- umask 
-    modes' <-  many mode 
-    comments
-    return $ AccessMode x y (fromList modes') r 
+    commentsOrSpaces
+    x <- umaskP
+    commentsOrSpaces
+    modes' <-  mode `sepBy` commentsOrSpaces
+    emptySpace
+    endOfInput
+    return $ AccessMode x modes' r 
+
+commentsOrSpaces :: Parser ()
+commentsOrSpaces = comments <|> emptySpace
 
 comments :: Parser ()
 comments = try (void $ (comment `sepBy` endOfLine) <* endOfLine <|> pure [()])
 
 mode :: Parser (PathRegexp, Mode)
 mode = do
-    comments
+    f <- char8 '/' <|> char8 '*'
     path <- takeWhile (\x -> not (inClass ":" x))
     delimeter
     ui <- userid
@@ -93,11 +105,7 @@ mode = do
     mm <- (Just <$> sfileMode) <|> pure Nothing
     delimeter
     mg <- (Just <$> try sfileMode) <|> pure Nothing
-    return (path, (ui, gi, mm, mg))
-
-
-
-
+    return (cons f path, (ui, gi, mm, mg))
 
 userid :: Parser Owner
 userid = NOwner <$> takeWhile (\x -> not (inClass ":" x))
@@ -114,7 +122,6 @@ numMode = numModeToCMode . digs <$> decimal
     digs :: Integral x => x -> [x]
     digs 0 = [0]
     digs x = digs (x `div` 10) ++ [x `mod` 10]
-
 
 symMode :: Parser CMode
 symMode = textModeToCMode <$> count 9 allowed
@@ -187,7 +194,15 @@ cmodeToNumMode (CMode x) =
         fun y _ = y
      in concatMap show $ foldl fun cm asBool
 
-
-
 goodComment :: Text
 goodComment = "  # asdfasdfasdf asdfasdf afsd\n\n"
+
+makeAccessMode :: FilePath -> AccessMode -> IO ()
+makeAccessMode = undefined
+
+checkRegexp :: PathRegexp -> IO Bool
+checkRegexp pr = do
+   r <-  compile compBlank execBlank pr 
+   case r of
+       Left _ -> return False
+       Right _ -> return True

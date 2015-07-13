@@ -67,9 +67,9 @@ run (Command (Add LayerContext) name) =
 run (Command BucketOpt name) = viewOrCreateOrSwitchBucket name
 run (Command Init _) = return ()
 run (Command Save _) = saveWorkSpaceAsLayer
-run (Command (Go (ByRoute route')) _) = whenClean (goRoute route' >> cleanWorkSpace >> restoreWorkSpaceFromBucket) "you must save work directory"
-run (Command (Go DUp) _) = whenClean goUp  "you must save work directory"
-run (Command (Go DDown) _) = whenClean goDown  "you must save work directory"
+run (Command (Go (ByRoute route')) _) = whenClean (goRoute route' >> cleanWorkSpace >> restoreWorkSpaceFromBucket) ("you must save work directory" :: String)
+run (Command (Go DUp) _) = whenClean goUp  ("you must save work directory" :: String)
+run (Command (Go DDown) _) = whenClean goDown  ("you must save work directory" :: String)
 run (Command DiffAction _) =
     ifM isWorkDirectoryClean
         showDiff

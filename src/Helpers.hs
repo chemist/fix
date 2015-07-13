@@ -5,7 +5,6 @@ import           Data.Binary                (decodeFile)
 import           System.Directory
 import           System.FilePath
 -- import System.Posix.Files
-import           Control.Applicative
 import           Control.Exception.Base     (SomeException, throw, try)
 import           Control.Monad.State
 import           Control.Monad.Writer       hiding (First)

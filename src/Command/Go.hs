@@ -17,13 +17,13 @@ import Prelude hiding (log)
 
 goRoute :: Route -> ST ()
 goRoute route' = do
-    log "go route"
+    log ("go route" :: String)
     bucket <- getBucket
     modify $ \s -> s { stBucket = bucket { rTree = (goClosest route' (rTree bucket)) }}
 
 goUp :: ST ()
 goUp = do
-    log "go up"
+    log ("go up" :: String)
     bucket <- getBucket
     case goLevel (rTree bucket) of
          Nothing -> return ()
@@ -37,7 +37,7 @@ goUp = do
 
 goDown :: ST ()
 goDown = do
-    log "go down"
+    log ("go down" :: String)
     bucket <- getBucket
     case T.goUp (rTree bucket) of
          Nothing -> return ()

@@ -19,23 +19,23 @@ viewOrCreateOrSwitchBucket name = do
     ifM ((/= name) <$> getBucketName)
         (return ()) -- current name, nothing to do
         (if elem name buckets
-           then whenClean switch "can't switch bucket, work directory has unsaved files"
-           else whenClean create "can't create bucket, work directory has unsaved files"
+           then whenClean switch ("can't switch bucket, work directory has unsaved files" :: String)
+           else whenClean create ("can't create bucket, work directory has unsaved files" :: String)
         )
     where
       switch = do
-          log "try switch bucket"
+          log ("try switch bucket" :: String)
           current <- getBucketName
           if current == name
              then return ()
              else do
-                  log "switch bucket"
+                  log ("switch bucket" :: String)
                   saveBucket
                   cleanWorkSpace
                   restoreBucket name
                   restoreWorkSpaceFromBucket
       create = do
-          log "create bucket"
+          log ("create bucket" :: String)
           saveBucket
           cleanWorkSpace
           fixDirectory <- getFixDirectory
@@ -52,27 +52,27 @@ viewOrCreateOrSwitchBucket name = do
 
 restoreBucket :: Name -> ST ()
 restoreBucket name = do
-    log "restore bucket"
+    log ("restore bucket" :: String)
     fixDirectory <- getFixDirectory
     available <- isBucketAvailable name
     if available
        then do
            bucket <- liftIO $ decodeFile $ fixDirectory </> name </> "bucket"
            modify $ \s -> s { stBucket = bucket }
-       else msg "bucket not found"
+       else msg ("bucket not found" :: String)
 
 restoreWorkSpaceFromBucket :: ST ()
 restoreWorkSpaceFromBucket = do
-    log "restore work space from bucket"
+    log ("restore work space from bucket" :: String)
     layer <- getAllLayersFromBucket
-    log "layer: "
+    log ("layer: " :: String)
     log layer
     work <- getWorkDirectory
     liftIO $ restore work layer
 
 saveBucket :: ST ()
 saveBucket = do
-    log "save bucket"
+    log ("save bucket" :: String)
     bucketName <- getBucketName
     bucket <- getBucket
     fixDirectory <- getFixDirectory

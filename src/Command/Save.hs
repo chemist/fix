@@ -14,15 +14,15 @@ saveWorkSpaceAsLayer = do
     n <- getLayerName
     wd <- getWorkDirectory
     old <- getParrentsLayersFromBucket 
-    log "old: "
+    log ("old: " :: String)
     log old
     new <- liftIO $ dump n wd :: ST (Layer DF)
     layersPath <- getLayersPath
     h <- getLayerHash
     let changes = getPatch (sortLayer old) (sortLayer new)
-    log "changes: "
+    log ("changes: " :: String)
     log changes
     case (h, changes) of
          (_, Changes [])  -> return ()
-         (Nothing, _)  -> msg "Changes not saved, add layer first"
+         (Nothing, _)  -> msg ("Changes not saved, add layer first" :: String)
          (Just hash', _) -> liftIO $ encodeFile (layersPath </> hash') changes

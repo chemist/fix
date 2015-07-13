@@ -4,7 +4,6 @@ import System.Directory
 import Data.Binary (encodeFile)
 import System.FilePath
 import Control.Monad.State
-import Control.Applicative
 
 import Types
 import Helpers

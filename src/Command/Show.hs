@@ -46,7 +46,7 @@ showDiff = do
     new <- liftIO $ dump n wd :: ST (Layer DF)
     let changes = getPatch old new
     let (r, a, ra) = diffShow changes
-    msg "Diff result..."
+    msg ("Diff result..." :: String)
     msg r
     msg a
     msg ra

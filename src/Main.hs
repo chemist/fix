@@ -75,5 +75,6 @@ run (Command DiffAction _) =
         showDiff
         (return ())
 run (Command View _) = view
+run (Command (Help obj) _) = showHelp obj
 
 run _ = liftIO $ printf "command not realizaded"

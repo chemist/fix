@@ -8,6 +8,7 @@ module Command
 , createLayer
 , saveWorkSpaceAsLayer
 , restoreWorkSpaceFromBucket
+, showHelp
 )
 where
 
@@ -16,5 +17,6 @@ import           Command.Bucket
 import           Command.Go
 import           Command.Save
 import           Command.Show
+import           Command.Help
 
 

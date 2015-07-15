@@ -1,13 +1,13 @@
-module Templates.Template where
+module Data.DataFile.Template where
 
-import Text.EDE
-import Data.ByteString.Char8
-import Data.Binary
+import           Data.Binary
+import           Data.ByteString.Char8
+import           Text.EDE
 
 data Tpl = Tpl
   { template :: Template
   , rawFile  :: ByteString
-  } deriving (Eq) 
+  } deriving (Eq)
 
 instance Binary Tpl where
     put (Tpl _ x) = put x

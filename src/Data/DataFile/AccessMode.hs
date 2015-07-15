@@ -1,22 +1,22 @@
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-module AccessMode where
+module Data.DataFile.AccessMode where
 
 import           Control.Applicative
-import           Data.Attoparsec.ByteString.Char8 hiding (take, isEndOfLine)
-import           Data.Attoparsec.Text (isEndOfLine)
+import           Control.Monad                    (void)
+import           Data.Attoparsec.ByteString.Char8 hiding (isEndOfLine, take)
+import           Data.Attoparsec.Text             (isEndOfLine)
+import           Data.Binary
 import           Data.Bits
-import           Data.Text            (Text)
-import           Prelude              hiding (readFile, takeWhile)
+import           Data.ByteString                  (ByteString, cons)
+import           Data.Maybe
+import           Data.Text                        (Text)
+import           GHC.Generics
+import           Prelude                          hiding (readFile, takeWhile)
 import           System.Posix.Types
 import           Text.Printf
-import           Control.Monad (void)
-import           Data.Binary
-import           Data.ByteString (ByteString, cons)
-import           GHC.Generics
-import Data.Maybe
-import Text.Regex.Posix.ByteString
+import           Text.Regex.Posix.ByteString
 
 example :: FilePath
 example = "_fix_access_mode_"
@@ -37,21 +37,21 @@ instance Binary Owner
 type Mode = (Owner, Group, Maybe CMode, Maybe CMode)
 
 data AccessMode = AccessMode
-  { umask     :: CMode
-  , modes     :: [(PathRegexp, Mode)]
-  , rawFile   :: ByteString
+  { umask   :: CMode
+  , modes   :: [(PathRegexp, Mode)]
+  , rawFile :: ByteString
   } deriving (Eq, Ord, Generic)
 
 instance Show AccessMode where
-    show a = "Access mode: umask = " ++ cmodeToNumMode (umask a) ++ " modes = " ++ showModes 
+    show a = "Access mode: umask = " ++ cmodeToNumMode (umask a) ++ " modes = " ++ showModes
       where
-      showModes = 
+      showModes =
         let m = modes a
             defMode = fromMaybe (umask a)
         in show $ map (\(p,(o, g, mfm, mgm)) -> show p ++ ":" ++ show o ++ ":" ++ show g ++ ":" ++ cmodeToNumMode (defMode mfm) ++ ":" ++ cmodeToNumMode (defMode mgm)) m
 
 instance Binary CMode where
-    put = put . fromEnum 
+    put = put . fromEnum
     get = toEnum <$> get
 
 instance Binary AccessMode
@@ -85,7 +85,7 @@ accessMode r = do
     modes' <-  mode `sepBy` commentsOrSpaces
     emptySpace
     endOfInput
-    return $ AccessMode x modes' r 
+    return $ AccessMode x modes' r
 
 commentsOrSpaces :: Parser ()
 commentsOrSpaces = comments <|> emptySpace
@@ -202,7 +202,7 @@ makeAccessMode = undefined
 
 checkRegexp :: PathRegexp -> IO Bool
 checkRegexp pr = do
-   r <-  compile compBlank execBlank pr 
+   r <-  compile compBlank execBlank pr
    case r of
        Left _ -> return False
        Right _ -> return True

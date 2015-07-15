@@ -10,26 +10,30 @@ import           Control.Applicative
 import           Control.Monad
 import           Crypto.Hash.MD5
 import           Data.Algorithm.Diff
+import           Data.Attoparsec.ByteString.Char8 (parseOnly)
 import           Data.Binary
-import           Data.ByteString       (ByteString, readFile, writeFile)
-import           Data.List             (delete, sortBy)
-import           Data.Monoid           ((<>))
-import qualified Data.Set              as Set
-import           GHC.Generics          (Generic)
+import           Data.ByteString                  (ByteString, readFile,
+                                                   writeFile)
+import           Data.List                        (delete, sortBy)
+import           Data.Monoid                      ((<>))
+import qualified Data.Set                         as Set
+import           Data.Yaml                        (decodeEither)
+import           GHC.Generics                     (Generic)
 import           GHC.IO.Exception
-import           Prelude               hiding (readFile, writeFile)
+import           Prelude                          hiding (readFile, writeFile)
 import           System.Directory.Tree
 import           System.FilePath
-import           Data.Attoparsec.ByteString.Char8 (parseOnly)
+import qualified Text.EDE                         as E
+import qualified Control.Monad.State              as ST
 -- import           Data.ByteString.Char8 (unpack)
 
+import           Data.DataFile.AccessMode
+import qualified Data.DataFile.AccessMode         as M
+import           Data.DataFile.Environment
+import qualified Data.DataFile.Environment        as Env
+import           Data.DataFile.Template
+import qualified Data.DataFile.Template           as T
 import           Data.Tree
-import           AccessMode
-import qualified AccessMode as M
-import           Templates.Template
-import qualified Templates.Template as T
-import qualified Text.EDE as E
-import qualified Control.Monad.State as ST
 
 instance Contexted CLayer where
     index (CLayer _ n _) = n
@@ -59,30 +63,30 @@ instance Binary Bucket
 
 newtype DTree a = DTree (AnchoredDirTree a) deriving (Eq, Generic, Binary)
 
-type Header = String
-type ViewST = ST.State Header 
+type Header = [String]
+type ViewST = ST.State Header
 
 instance Show a => Show (DTree a) where
-    show (DTree (anc :/ f)) = ST.evalState view ""
+    show (DTree (anc :/ f)) = ST.evalState view []
       where
         view :: ViewST String
         view = do
             tree <- draw f
             st <- ST.get
-            return $ anc ++ "\n" ++ st ++ tail (unlines $ splitSpecial tree)
+            return $ anc ++ "\n" ++ (unlines st) ++ tail (unlines $ splitSpecial tree)
         draw :: Show a => DirTree a -> ViewST [String]
-        draw (Dir n xs)
-          | n == "_fix_" = do
-              st <- ST.get
-              forAdd <- drawSpecial xs
-              ST.put $ st ++ unlines forAdd
-              return []
-          | otherwise = do
+        draw (Dir n xs) = do
             x <- drawSubtree xs
             return $ ("/" <> n) : x
         draw (File n x)
           | n == "_fix_access_mode_" = return $ [show x]
           | (snd $ splitExtension n) == ".ede" = return $ ["/" <> (fst $ splitExtension n) <> show x]
+          | (snd $ splitExtension n) == ".fix_mode" = do
+              ST.modify $ (:) ("/" <> (fst $ splitExtension n) <> show x) 
+              return []
+          | (snd $ splitExtension n) == ".fix_env" = do
+              ST.modify $ (:) ("/" <> (fst $ splitExtension n) <> show x) 
+              return []
           | otherwise = return $ ["/" <> n <> show x]
         draw (Failed{}) = return $ ["failed"]
 
@@ -97,13 +101,6 @@ instance Show a => Show (DTree a) where
             return $  "|" : shift "+- " "|  " y ++ z
 
         shift first other = zipWith (++) (first : repeat other)
-        drawSpecial :: Show a => [DirTree a] -> ViewST [String]
-        drawSpecial [] = return []
-        drawSpecial [x] = draw x
-        drawSpecial (x:ys) = do
-            y <- draw x 
-            z <- drawSpecial ys
-            return $ y ++  z
         splitSpecial ("|":"|":ys) = splitSpecial ("|":ys)
         splitSpecial ("|":y:ys) = "|" : splitSpecial (y:ys)
         splitSpecial (x:y:ys) = x : splitSpecial (y:ys)
@@ -114,18 +111,20 @@ newtype MD5 = MD5 ByteString deriving (Show, Eq, Ord, Generic)
 instance Binary MD5
 
 data DF = D
-        | M MD5 AccessMode 
+        | M MD5 AccessMode
         | F MD5 ByteString
         | S MD5 ByteString
         | T MD5 Tpl
+        | EN MD5 Env
         deriving (Eq, Ord, Generic)
 
 instance Show DF where
     show D = ""
-    show (F _ _bs) = " :: File " -- ++ unpack bs
-    show (S _ _bs) = " :: Script " -- ++ unpack bs
-    show (M _ _am) = "AccessMode" -- show am
-    show (T _ _tpl) = " :: Template" -- show tpl
+    show (F _ _bs)   = " :: File " -- ++ unpack bs
+    show (S _ _bs)   = " :: Script " -- ++ unpack bs
+    show (M _ _am)   = " :: AccessMode" -- show am
+    show (T _ _tpl)  = " :: Template" -- show tpl
+    show (EN _ _env) = " :: Env" -- show env
 
 type PathRegexp = String
 
@@ -170,19 +169,26 @@ instance Restorable DF where
         writeFile f (M.rawFile bs)
     restore f (T _ bs) = do
         writeFile f (T.rawFile bs)
+    restore f (EN _ bs) = do
+        writeFile f (Env.rawFile bs)
     restore _ _ = undefined
     dump _ f = do
         bs <- readFile f
-        case (snd $ splitFileName f, snd $ splitExtension f) of
-             ("_fix_access_mode_", _) -> return $ M (MD5 $ hash bs) (right (parseOnly (accessMode bs) bs))
-             (_, ".ede")              -> return $ T (MD5 $ hash bs) (parseTpl bs)
-             _                        -> return $ F (MD5 $ hash bs) bs
+        case (snd $ splitExtension f) of
+             ".fix_mode" -> return $ M (MD5 $ hash bs) (right (parseOnly (accessMode bs) bs))
+             ".fix_env"  -> return $ EN (MD5 $ hash bs) (parseEnvironment bs)
+             ".ede"      -> return $ T (MD5 $ hash bs) (parseTpl bs)
+             _           -> return $ F (MD5 $ hash bs) bs
         where
           right (Right x) = x
           right _ = error "right: bad parse result"
           parseTpl bs = case E.parse bs of
                              E.Success tpl -> Tpl tpl bs
                              _ -> error "parseTpl: bad template"
+          parseEnvironment :: ByteString -> Env
+          parseEnvironment bs = case decodeEither bs of
+                                     Right o -> Env o bs
+                                     Left e -> error e
 
 toLayer :: DTree DF -> Layer DF
 toLayer (DTree (a :/ dt)) = Layer (a, map (\(p, f) -> (joinPath $ reverse p, f)) $ toList' ([], dt))

@@ -63,6 +63,8 @@ parseCommand = subparser
       ( progDesc "show current bucket" ))
   <> command "go" (info ( helper <*> (Command <$> (Go <$> parseDirection) <*> pure ""))
       ( progDesc "switch to layer"))
+  <> command "help" (info ( helper <*> (Command <$> (Help <$> parseHelp) <*> pure ""))
+      ( progDesc "show help"))
   )
   where
     sm = strArgument . metavar
@@ -90,6 +92,17 @@ parseDirection = subparser
       ( metavar "ROUTE"
       <> help "way in tree like: one.two.tree"
       )
+
+parseHelp :: Parser HelpObject
+parseHelp = subparser
+  (  command "template"    (info (pure HTemplate)   ( progDesc "template"))
+  <> command "access" (info (pure HAccessMode) ( progDesc "access mode"))
+  <> command "env" (info (pure HEnv) ( progDesc "environment"))
+  )
+
+data HelpObject = HTemplate | HAccessMode | HEnv deriving (Show, Eq, Generic)
+
+instance Binary HelpObject
 
 routeFromString :: String -> Route
 routeFromString t
@@ -129,7 +142,6 @@ data Command = Command Action String
 instance Binary Command
 
 data Direction = DUp | DDown | ByRoute Route | DLeft | DRight deriving (Show, Eq, Generic)
-
 instance Binary Direction
 
 data Context = BucketContext | LayerContext | WorkContext deriving (Show, Eq, Generic)
@@ -142,7 +154,7 @@ data Action = Add Context
             | View
             | Init
             | Save
-            | Help
+            | Help HelpObject
             deriving (Show, Eq, Generic)
 
 instance Binary Action

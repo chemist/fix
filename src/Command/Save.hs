@@ -22,6 +22,8 @@ saveWorkSpaceAsLayer = do
     let changes = getPatch (sortLayer old) (sortLayer new)
     log ("changes: " :: String)
     log changes
+    log ("hash: " :: String)
+    log h
     case (h, changes) of
          (_, Changes [])  -> return ()
          (Nothing, _)  -> msg ("Changes not saved, add layer first" :: String)

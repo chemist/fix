@@ -32,6 +32,8 @@ fix clean
   очистить рабочую директорию без сохранения
 fix destroy $name
   физически удалить слой
+fix render
+  показать скомпилированную файловую систему
 --}
 
 parseOptions :: IO Options
@@ -61,6 +63,10 @@ parseCommand = subparser
       ( progDesc "initialize fix space" ))
   <> command "show" (info (Command View <$> pure "")
       ( progDesc "show current bucket" ))
+  <> command "clean" (info (Command Clean <$> pure "")
+      ( progDesc "clean workspace" ))
+  <> command "render" (info (Command Render <$> pure "")
+      ( progDesc "render templates, show resulted filesystem" ))
   <> command "go" (info ( helper <*> (Command <$> (Go <$> parseDirection) <*> pure ""))
       ( progDesc "switch to layer"))
   <> command "help" (info ( helper <*> (Command <$> (Help <$> parseHelp) <*> pure ""))
@@ -154,6 +160,8 @@ data Action = Add Context
             | View
             | Init
             | Save
+            | Clean
+            | Render
             | Help HelpObject
             deriving (Show, Eq, Generic)
 

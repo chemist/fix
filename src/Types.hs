@@ -8,6 +8,7 @@ module Types
 , index
 , CLayer(..)
 , Tree(..)
+, DTree(..)
 , Layer(..)
 , PatchType(..)
 , goClosest

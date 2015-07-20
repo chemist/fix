@@ -63,42 +63,27 @@ instance Binary Bucket
 
 newtype DTree a = DTree (AnchoredDirTree a) deriving (Eq, Generic, Binary)
 
-type Header = [String]
-type ViewST = ST.State Header
-
 instance Show a => Show (DTree a) where
-    show (DTree (anc :/ f)) = ST.evalState view []
+    show (DTree (anc :/ f)) = view
       where
-        view :: ViewST String
-        view = do
-            tree <- draw f
-            st <- ST.get
-            return $ anc ++ "\n" ++ (unlines st) ++ tail (unlines $ splitSpecial tree)
-        draw :: Show a => DirTree a -> ViewST [String]
-        draw (Dir n xs) = do
-            x <- drawSubtree xs
-            return $ ("/" <> n) : x
+        view :: String
+        view =
+            let tree = draw f
+            in anc ++ "\n" ++ tail (unlines $ splitSpecial tree)
+        draw :: Show a => DirTree a -> [String]
+        draw (Dir n xs) = "/" <> n : drawSubtree xs
         draw (File n x)
-          | n == "_fix_access_mode_" = return $ [show x]
-          | (snd $ splitExtension n) == ".ede" = return $ ["/" <> (fst $ splitExtension n) <> show x]
-          | (snd $ splitExtension n) == ".fix_mode" = do
-              ST.modify $ (:) ("/" <> (fst $ splitExtension n) <> show x) 
-              return []
-          | (snd $ splitExtension n) == ".fix_env" = do
-              ST.modify $ (:) ("/" <> (fst $ splitExtension n) <> show x) 
-              return []
-          | otherwise = return $ ["/" <> n <> show x]
-        draw (Failed{}) = return $ ["failed"]
+          | n == "_fix_access_mode_" = [show x]
+          | (snd $ splitExtension n) == ".ede" = ["/" <> (fst $ splitExtension n) <> show x]
+          | (snd $ splitExtension n) == ".fix_mode" = ["/" <> (fst $ splitExtension n) <> show x] 
+          | (snd $ splitExtension n) == ".fix_env" = ["/" <> (fst $ splitExtension n) <> show x] 
+          | otherwise = ["/" <> n <> show x]
+        draw (Failed{}) = ["failed"]
 
-        drawSubtree :: Show a => [DirTree a] -> ViewST [String]
-        drawSubtree [] = return []
-        drawSubtree [x] = do
-            y <- draw x
-            return $    "|" : shift "`- " "   " y
-        drawSubtree (x:ys) = do
-            y <- draw x
-            z <- drawSubtree ys
-            return $  "|" : shift "+- " "|  " y ++ z
+        drawSubtree :: Show a => [DirTree a] -> [String]
+        drawSubtree [] = []
+        drawSubtree [x] = "|" : shift "`- " "   " (draw x)
+        drawSubtree (x:ys) = "|" : shift "+- " "|  " (draw x) ++ (drawSubtree ys)
 
         shift first other = zipWith (++) (first : repeat other)
         splitSpecial ("|":"|":ys) = splitSpecial ("|":ys)

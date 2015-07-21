@@ -3,43 +3,75 @@ module Command.Render where
 
 import Types
 import Helpers
+import Command.Clean
 import System.Directory.Tree
 import Control.Monad.State
 import           Data.Yaml
 import Data.DataFile.Environment
 import           System.FilePath
 import Data.Text (Text, pack)
-import Data.Monoid 
+import qualified Data.Text.Lazy.IO as T
+import qualified Data.ByteString as B
+import Data.DataFile.Template (template)
+import Text.EDE
 import Data.HashMap.Strict hiding (foldr, map)
+import Data.IORef
 
 
 render :: ST ()
 render = flip whenClean ("can't render workspace, it's dirty" :: String) $ do
-    -- cleanWorkSpace
+    cleanWorkSpace
     fp <- getWorkDirectory
     DTree adt <- fromLayer <$> getAllLayersFromBucket
     let env = splitEnv $ zipPaths ("" :/ dirTree adt)
-    result <- liftIO $ writeDirectoryWith (renderAll env) (fp :/ dirTree adt)
-    liftIO $ print result
-    liftIO $ print env
+    st <- get
+    renderError <- liftIO $ newIORef []
+    _ <- liftIO $ writeDirectoryWith (\x y -> runST (renderAll renderError env x y) st >> return ()) (fp :/ dirTree adt)
+    renderError' <- liftIO $ readIORef renderError
+    if (renderError' == [])
+       then put (st { stIsRender = True })
+       else do
+          clean
+          msg ("can't render templates:" :: String)
+          mapM_ (liftIO . putStrLn) renderError'
 
-renderAll :: Value -> FilePath -> DF -> IO ()
-renderAll _env fp a = print fp >> print a 
+renderAll :: IORef [String] -> Object -> FilePath -> DF -> ST ()
+renderAll _ _env fp (F _ bs) = do
+    liftIO $ B.writeFile fp bs
+renderAll renderError env fp (T _ tpl) = do
+    let fn = dropExtension fp
+        rendered = eitherRender (template tpl) env
+    case rendered of
+         Left error' -> liftIO $ modifyIORef' renderError $ \x -> ("file: " ++ goodFilePath ++ " error" ++ toError error') : x 
+         Right txt -> liftIO $ T.writeFile fn txt
+    where
+      ('.':'/':goodFilePath) = fp
+      toError = dropWhile (/= ':') . tail . dropWhile (/=':') . tail . dropWhile (/=':')
+renderAll _ _ _ _ = return ()
 
 
-splitEnv :: DirTree (FilePath, DF) -> Value
-splitEnv = Object . fromList . foldr splitValue []
+splitEnv :: DirTree (FilePath, DF) -> Object
+splitEnv = foldr splitObject empty
   where
-    splitValue :: (FilePath, DF) -> [(Text, Value)] -> [(Text, Value)]
-    splitValue (fp, EN _ (Env (Object v) _)) xs =
-        let l = map (\(key, val) -> (filePathToKey fp <> "." <> key, val)) $ toList v 
-        in l <>  xs
-    splitValue (fp, EN _ (Env x _)) xs  = (filePathToKey fp, x) : xs
-    splitValue _ xs = xs
+    splitObject :: (FilePath, DF) -> Object -> Object
+    splitObject (fp, EN _ (Env obj _)) splitted =
+        let single = filePathToObject fp obj
+        in union splitted single
+    splitObject _ x = x
 
 filePathToKey :: FilePath -> Text
 filePathToKey ('.':'/':fp) = pack (map replaceToPoint $ dropExtension fp)
 filePathToKey fp = error ("filePathToKey" ++ fp)
+
+filePathToObject :: FilePath -> Value -> Object
+filePathToObject ('.':'/':fp) o =
+    let splitted = splitDirectories $ dropExtension fp
+        Object obj = object $ foldr fun [(pack $ last splitted) .= o] (init splitted)
+    in obj
+    where
+      fun key xs = [(pack key) .= object xs]
+filePathToObject fp _ = error ("filePathToObject" ++ fp)
+
 
 replaceToPoint :: Char -> Char
 replaceToPoint '/' = '.'

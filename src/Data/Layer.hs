@@ -24,7 +24,6 @@ import           Prelude                          hiding (readFile, writeFile)
 import           System.Directory.Tree
 import           System.FilePath
 import qualified Text.EDE                         as E
-import qualified Control.Monad.State              as ST
 -- import           Data.ByteString.Char8 (unpack)
 
 import           Data.DataFile.AccessMode

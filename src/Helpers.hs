@@ -29,7 +29,7 @@ fixStateName :: Path
 fixStateName = "®««««««"
 
 emptyFix :: Fix
-emptyFix = Fix "." emptyBucket Normal
+emptyFix = Fix "." emptyBucket Normal False
 
 getFixDirectory :: ST Path
 getFixDirectory = stFixDirectory <$> get
@@ -154,6 +154,9 @@ log x = tell $ show x <> "\n"
 msg :: Show a => a -> ST ()
 msg = liftIO . print
 
+isNotRendered :: ST Bool
+isNotRendered = not . stIsRender <$> get
+
 isWorkDirectoryClean :: ST Bool
 isWorkDirectoryClean = do
     n <- getLayerName
@@ -163,12 +166,12 @@ isWorkDirectoryClean = do
     return $ getPatch old new == Changes []
 
 ifM :: Monad m => m Bool -> m () -> m () -> m ()
-ifM getFlag bad good = do
+ifM getFlag good bad = do
     f <- getFlag
     if f then good else bad
 
 whenClean :: Show a => ST () -> a -> ST ()
-whenClean w m = ifM isWorkDirectoryClean (msg m) w
+whenClean w m = ifM isNotRendered (ifM isWorkDirectoryClean w (msg m)) (msg "First you must do fix clean")
 
 
 

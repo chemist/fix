@@ -17,11 +17,11 @@ viewOrCreateOrSwitchBucket "" = do
 viewOrCreateOrSwitchBucket name = do
     buckets <- getAllBuckets
     ifM ((/= name) <$> getBucketName)
-        (return ()) -- current name, nothing to do
         (if elem name buckets
            then whenClean switch ("can't switch bucket, work directory has unsaved files" :: String)
            else whenClean create ("can't create bucket, work directory has unsaved files" :: String)
         )
+        (return ()) -- current name, nothing to do
     where
       switch = do
           log ("try switch bucket" :: String)

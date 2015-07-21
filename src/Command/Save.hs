@@ -10,7 +10,10 @@ import Helpers
 import Types
 
 saveWorkSpaceAsLayer :: ST ()
-saveWorkSpaceAsLayer = do
+saveWorkSpaceAsLayer = ifM isNotRendered good bad
+  where
+  bad = msg "Can't save when rendered. First do fix clean."
+  good = do
     n <- getLayerName
     wd <- getWorkDirectory
     old <- getParrentsLayersFromBucket 

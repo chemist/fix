@@ -20,6 +20,7 @@ data Fix =
   Fix { stFixDirectory :: Path
       , stBucket       :: Bucket
       , stVerbosity    :: Verbosity
+      , stIsRender     :: Bool
       } deriving (Eq, Generic)
 
 instance Binary Fix

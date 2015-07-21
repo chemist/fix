@@ -11,6 +11,7 @@ clean = do
     cleanWorkSpace
     layer <- getAllLayersFromBucket
     work <- getWorkDirectory
+    modify (\st -> st { stIsRender = False })
     liftIO $ restore work layer
 
 

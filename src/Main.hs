@@ -62,8 +62,8 @@ runInit _ _ = error "Cant found fix directory, try fix init, or fix -f path to f
 run :: Command -> ST ()
 run (Command (Add LayerContext) name) =
     ifM isEmpty
-      (createLayer name >> (getRoute >>= \r -> goRoute (r <> [name])))
       (createLayer name)
+      (createLayer name >> (getRoute >>= \r -> goRoute (r <> [name])))
 run (Command BucketOpt name) = viewOrCreateOrSwitchBucket name
 run (Command Init _) = return ()
 run (Command Save _) = saveWorkSpaceAsLayer
@@ -72,8 +72,8 @@ run (Command (Go DUp) _) = whenClean goUp  ("you must save work directory" :: St
 run (Command (Go DDown) _) = whenClean goDown  ("you must save work directory" :: String)
 run (Command DiffAction _) =
     ifM isWorkDirectoryClean
-        showDiff
         (return ())
+        showDiff
 run (Command View _) = view
 run (Command Clean _) = clean
 run (Command Render _) = render

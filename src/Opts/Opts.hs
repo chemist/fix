@@ -50,7 +50,7 @@ parseOptions =
 parseCommand :: Parser Command
 parseCommand = subparser
   (  command "add" (info (helper <*> (Command <$> (pure $ Add LayerContext) <*> sm "NAME"))
-      ( progDesc "create new layer, and switch to him" ) )
+      ( progDesc "create new layer, and switch to it" ) )
   <> command "save" (info (Command Save <$> pure "")
       ( progDesc "save current layer" ))
   <> command "diff" (info (Command DiffAction <$> pure "")

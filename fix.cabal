@@ -33,7 +33,7 @@ executable fix
                      , Diff
                      , ede
                      , process
-                     , libssh2
+  --                   , libssh2
                      , attoparsec
                      , text
                      , regex-posix

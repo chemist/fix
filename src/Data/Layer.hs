@@ -74,8 +74,9 @@ instance Show a => Show (DTree a) where
         draw (File n x)
           | n == "_fix_access_mode_" = [show x]
           | (snd $ splitExtension n) == ".ede" = ["/" <> (fst $ splitExtension n) <> show x]
-          | (snd $ splitExtension n) == ".fix_mode" = ["/" <> (fst $ splitExtension n) <> show x] 
-          | (snd $ splitExtension n) == ".fix_env" = ["/" <> (fst $ splitExtension n) <> show x] 
+          | (snd $ splitExtension n) == ".fix_mode" = ["/" <> (fst $ splitExtension n) <> show x]
+          | (snd $ splitExtension n) == ".fix_env" = ["/" <> (fst $ splitExtension n) <> show x]
+          | (snd $ splitExtension n) == ".fix_run" = ["/" <> (fst $ splitExtension n) <> show x]
           | otherwise = ["/" <> n <> show x]
         draw (Failed{}) = ["failed"]
 
@@ -147,20 +148,18 @@ instance (Restorable a) => Restorable (DTree a) where
       fun _ = True
 
 instance Restorable DF where
-    restore f (F _ bs) = do
-        writeFile f bs
-    restore f (M _ bs) = do
-        writeFile f (M.rawFile bs)
-    restore f (T _ bs) = do
-        writeFile f (T.rawFile bs)
-    restore f (EN _ bs) = do
-        writeFile f (Env.rawFile bs)
+    restore f (F _ bs) = writeFile f bs
+    restore f (M _ bs) = writeFile f (M.rawFile bs)
+    restore f (T _ bs) = writeFile f (T.rawFile bs)
+    restore f (S _ bs) = writeFile f bs
+    restore f (EN _ bs) = writeFile f (Env.rawFile bs)
     restore _ _ = undefined
     dump _ f = do
         bs <- readFile f
         case (snd $ splitExtension f) of
              ".fix_mode" -> return $ M (MD5 $ hash bs) (right (parseOnly (accessMode bs) bs))
              ".fix_env"  -> return $ EN (MD5 $ hash bs) (parseEnvironment bs)
+             ".fix_run"  -> return $ S (MD5 $ hash bs) bs
              ".ede"      -> return $ T (MD5 $ hash bs) (parseTpl bs)
              _           -> return $ F (MD5 $ hash bs) bs
         where

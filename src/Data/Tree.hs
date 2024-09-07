@@ -7,8 +7,8 @@ module Data.Tree where
 
 import           Data.Binary
 import           Data.Maybe   (fromJust)
+import           Data.Monoid
 import           GHC.Generics
-import           Data.Semigroup
 
 type Name = String
 type Route = [Name]
@@ -49,9 +49,6 @@ data Tree a = Node a (Tree a) (Tree a)
             deriving (Functor, Eq, Generic)
 
 instance Binary a => Binary (Tree a)
-
-instance Contexted a => Semigroup (Tree a) where
-    (<>) = mappend
 
 instance Contexted a => Monoid (Tree a) where
     mempty = Empty
@@ -190,3 +187,5 @@ goClosest ys z = walk ys (top z)
   walk (x : xs) z'
     | x == giz z' = maybe z' (walk xs) (goLevel z')
     | otherwise = maybe z' (walk (x : xs)) (goNext z')
+
+

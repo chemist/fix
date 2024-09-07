@@ -7,20 +7,21 @@ import qualified Data.ByteString           as B
 import           Data.DataFile.Environment
 import           Data.DataFile.Template    (template)
 import           Data.Foldable             (foldrM)
-import           Data.HashMap.Strict       hiding (foldr, map)
+import qualified Data.HashMap.Strict       as HM
 import           Data.IORef
 import           Data.Text                 (Text, pack)
 import qualified Data.Text.Lazy.IO         as T
 import           Data.Yaml
+import           Data.Aeson.KeyMap         (union, empty, toHashMapText)
+import qualified Data.Aeson.KeyMap         as KeyMap
+import           Data.Aeson.Key            (fromText, Key)
+import           Prelude
 import           Helpers
 import           System.Directory.Tree
 import           System.FilePath
 import           Text.EDE
 import           Types
 
-
--- TODO replace union
---
 render :: ST ()
 render = flip whenClean ("can't render workspace, it's dirty" :: String) $ do
     cleanWorkSpace
@@ -28,10 +29,11 @@ render = flip whenClean ("can't render workspace, it's dirty" :: String) $ do
     DTree adt <- fromLayer <$> getAllLayersFromBucket
     let env = splitEnv $ zipPaths ("" :/ dirTree adt)
     scripts <- splitScripts $ zipPaths ("" :/ dirTree adt)
-    liftIO $ print $ union env scripts
+    let mergedEnv = toHashMapText (union env scripts)
+    liftIO $ print mergedEnv
     st <- get
     renderError <- liftIO $ newIORef []
-    _ <- liftIO $ writeDirectoryWith (\x y -> runST (renderAll renderError (union env scripts) x y) st >> return ()) (fp :/ dirTree adt)
+    _ <- liftIO $ writeDirectoryWith (\x y -> runST (renderAll renderError mergedEnv x y) st >> return ()) (fp :/ dirTree adt)
     renderError' <- liftIO $ readIORef renderError
     if (renderError' == [])
        then put (st { stIsRender = True })
@@ -40,7 +42,7 @@ render = flip whenClean ("can't render workspace, it's dirty" :: String) $ do
           msg ("can't render templates:" :: String)
           mapM_ (liftIO . putStrLn) renderError'
 
-renderAll :: IORef [String] -> Object -> FilePath -> DF -> ST ()
+renderAll :: IORef [String] -> HM.HashMap Text Value -> FilePath -> DF -> ST ()
 renderAll _ _env fp (F _ bs) = do
     liftIO $ B.writeFile fp bs
 renderAll renderError env fp (T _ tpl) = do
@@ -55,7 +57,7 @@ renderAll renderError env fp (T _ tpl) = do
 renderAll _ _ _ _ = return ()
 
 splitEnv :: DirTree (FilePath, DF) -> Object
-splitEnv = foldr splitObject empty
+splitEnv = Prelude.foldr splitObject empty
   where
     splitObject :: (FilePath, DF) -> Object -> Object
     splitObject (fp, EN _ (Env obj _)) splitted =
@@ -71,17 +73,17 @@ splitScripts = foldrM splitObject empty
         return $ union splitted $ filePathToObject fp Null
     splitObject _ x = return x
 
-filePathToKey :: FilePath -> Text
-filePathToKey ('.':'/':fp) = pack (map replaceToPoint $ dropExtension fp)
+filePathToKey :: FilePath -> Key
+filePathToKey ('.':'/':fp) = fromText (pack (map replaceToPoint $ dropExtension fp))
 filePathToKey fp = error ("filePathToKey" ++ fp)
 
 filePathToObject :: FilePath -> Value -> Object
 filePathToObject ('.':'/':fp) o =
     let splitted = splitDirectories $ map replaceToSlash $ dropExtension fp
-        Object obj = object $ foldr fun [(pack $ last splitted) .= o] (init splitted)
+        Object obj = object $ Prelude.foldr fun [(fromText $ pack $ last splitted) .= o] (init splitted)
     in obj
     where
-      fun key xs = [(pack key) .= object xs]
+      fun key xs = [(fromText $ pack key) .= object xs]
 filePathToObject fp _ = error ("filePathToObject" ++ fp)
 
 replaceToSlash :: Char -> Char
